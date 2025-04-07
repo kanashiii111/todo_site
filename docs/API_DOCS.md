@@ -20,16 +20,9 @@ curl -X GET http://localhost:8000/api/tasks/
 [
     {
         "id": 1,
-        "text": "Купить молоко",
-        "completed": false,
-        "created_at": "2023-10-20T12:00:00Z"
+        "name": "лаба",
+        "isCompleted": false,
     },
-    {
-        "id": 2,
-        "text": "Позвонить маме",
-        "completed": true,
-        "created_at": "2023-10-19T10:30:00Z"
-    }
 ]
 
 ```
