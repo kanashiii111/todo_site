@@ -5,4 +5,4 @@
 2. Добавлена авторизация пользователя с редиректом на profile/tasks/ после успешного входа
 3. При неуспешном входе заново открывается страница со входом
 4. /logout редиректит на /login 
-5. Редирект между profile/tasks, profile/calendar, profile/settings происходит через slug
+5. Переход между profile/tasks, profile/calendar, profile/settings происходит через slug
