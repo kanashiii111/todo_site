@@ -17,11 +17,9 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from todos.views import todoRetrieveUpdateDestroyView, todoListCreateView
-
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include('todos.urls')),
-    path('api/todos/', todoListCreateView.as_view(), name='todo-list-create')
+    path('', include('users.urls', namespace='users')),
+    path('', include('userProfile.urls',))
 ]
