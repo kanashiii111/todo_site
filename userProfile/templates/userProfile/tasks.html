@@ -1,2 +1,22 @@
-<a href="{% url 'profile_page' page_slug='tasks' %}"></a>
-<h1>Задачи</h1>
+{% block content %}
+<h1>Список задач</h1>
+<ul>
+  {% for task in tasks %}
+    <li>
+      <h3>Название: {{ task.title }}</h3>
+      <p>Описание: {{ task.description }}</p>
+      <p>Статус: {% if task.isCompleted %}Выполнено{% else %}В работе{% endif %}</p>
+      <p>Тег: {{task.tag}}</p>
+      <p>Приоритетность: {{task.priority}}</p>
+    </li>
+  {% empty %}
+    <li>Нет задач</li>
+  {% endfor %}
+</ul>
+{% endblock %}
+
+<nav class="navigation">
+    <a href="{% url 'settings' %}" class="nav-button">Профиль</a>
+    <a href="{% url 'tasks' %}" class="nav-button">Задачи</a>
+    <a href="{% url 'calendar' %}" class="nav-button">Календарь</a>
+</nav>

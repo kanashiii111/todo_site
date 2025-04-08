@@ -1,9 +1,12 @@
-from django.shortcuts import render
+from django.shortcuts import render, HttpResponse
+from .models import Task
 
-def profile_page_view(request, page_slug):
-    valid_pages = ['settings', 'calendar', 'tasks']
-    if page_slug not in valid_pages:
-        return render(request, 'userProfile/404.html', status=404)
-    return render(request, f'userProfile/{page_slug}.html')
+def settingsView(request):
+    return render(request, 'userProfile/settings.html')
     
+def tasksView(request):
+    tasks = Task.objects.all()
+    return render(request, 'userProfile/tasks.html', {'tasks': tasks})
 
+def calendarView(request):
+    return render(request, 'userProfile/calendar.html')

@@ -1,2 +1,7 @@
-<a href="{% url 'profile_page' page_slug='settings' %}"></a>
 <h1>Настройки</h1>
+
+<nav class="navigation">
+    <a href="{% url 'settings' %}" class="nav-button">Профиль</a>
+    <a href="{% url 'tasks' %}" class="nav-button">Задачи</a>
+    <a href="{% url 'calendar' %}" class="nav-button">Календарь</a>
+</nav>

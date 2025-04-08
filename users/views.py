@@ -11,7 +11,7 @@ def loginUser(request):
             user = authenticate(request, username=cd['username'], password=cd['password'])
             if user and user.is_active:
                 login(request, user)
-                return HttpResponseRedirect(reverse('profile_page', kwargs={'page_slug': 'tasks'}))
+                return HttpResponseRedirect(reverse('tasks'))
     else:
         form = LoginUserForm()
     return render(request, 'users/login.html', {'form': form})
