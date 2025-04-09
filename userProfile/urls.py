@@ -4,5 +4,6 @@ from . import views
 urlpatterns = [
     path('profile/settings/', views.settingsView, name='settings'),
     path('profile/calendar/', views.calendarView, name='calendar'),
-    path('profile/tasks/', views.tasksView, name='tasks')
+    path('profile/tasks/', views.tasksView, name='tasks'),
+    path('profile/tasks/task_creation/', views.createTask, name='task_creation')
 ]

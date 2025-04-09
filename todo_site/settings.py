@@ -38,7 +38,8 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'users.apps.UsersConfig',
-    'userProfile.apps.UserprofileConfig'
+    'userProfile.apps.UserprofileConfig',
+    'crispy_forms'
 ]
 
 MIDDLEWARE = [
@@ -55,9 +56,26 @@ MIDDLEWARE = [
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
+    'https://bifrost-public-https-v4.gw.postman.com',
+    'https://bifrost-web-https-v4.gw.postman.co',
+    'https://bifrost-web-https-v4.gw.postman.com'
 ]
 
+REST_FRAMEWORK = {
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer',
+    ],
+    'JSON_INDENT': 4,
+}
+
+LOGOUT_REDIRECT_URL = 'users:login'
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 ROOT_URLCONF = 'todo_site.urls'
+
 
 TEMPLATES = [
     {

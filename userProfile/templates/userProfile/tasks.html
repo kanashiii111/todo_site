@@ -12,6 +12,9 @@
   {% empty %}
     <li>Нет задач</li>
   {% endfor %}
+  <form method="get" action="{% url 'task_creation' %}">
+    <button type="submit" class="btn">Создать задачу</button>
+  </form>
 </ul>
 {% endblock %}
 

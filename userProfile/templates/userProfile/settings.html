@@ -1,7 +1,19 @@
-<h1>Настройки</h1>
+{% if user.is_authenticated %}
+    <h2>Ваш профиль : {{user.username}}</h2>
+    {% if user.profile.avatar %}  
+        Аватар<br>  
+        <img src="{{ user.profile.avatar.url }}" width="100" height="100" alt="Аватар">
+    {% else %}
+        <p>Аватар не загружен</p>
+    {% endif %}
+{% endif %}
 
 <nav class="navigation">
     <a href="{% url 'settings' %}" class="nav-button">Профиль</a>
     <a href="{% url 'tasks' %}" class="nav-button">Задачи</a>
     <a href="{% url 'calendar' %}" class="nav-button">Календарь</a>
+    <form method="post" action="{% url 'settings' %}">
+        {% csrf_token %}
+        <button type="submit" name="logout">Выйти</button>
+    </form>
 </nav>

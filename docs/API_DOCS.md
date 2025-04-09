@@ -1,3 +1,26 @@
 # ToDo API Documentation (Django REST Framework)
 
-Пока что пусто из-за полной переработки, скоро добавлю (возможно)
+## Получение списка задач
+
+**GET** `api/tasks/`
+
+**Ответ**
+```json
+[
+    {
+        "title": "Лаба",
+        "description": "лаба по проге",
+        "isCompleted": false,
+        "priority": 8,
+        "tag": "lab"
+    },
+    {
+        "title": "test1",
+        "description": "test1",
+        "isCompleted": false,
+        "priority": 1,
+        "tag": "test"
+    }
+]
+```
+
