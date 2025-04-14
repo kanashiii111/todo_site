@@ -1,0 +1,48 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background-color: #ffffff;
+}
+
+h2 {
+    text-align: center;
+}
+
+.navigation {
+    display: flex;
+    align-items: end;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.nav-button {
+    padding: 10px 20px;
+    background-color: #4CAF50;
+    color: white;
+    text-decoration: none;
+    border-radius: 5px;
+    transition: background-color 0.3s;
+    width: 300px;
+}
+
+.nav-button:hover {
+    background-color: #45a049;
+}
+
+form{
+    display: flex;
+    justify-content: center;
+    margin: 15px 0;
+}
+
+form button.nav-button {
+    margin: 0;
+    border: none;
+    cursor: pointer;
+    background-color: rgb(193, 38, 38);
+}
+
+form button.nav-button:hover {
+    background-color: red;
+}

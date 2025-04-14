@@ -1,19 +1,30 @@
-{% if user.is_authenticated %}
-    <h2>Ваш профиль : {{user.username}}</h2>
-    {% if user.profile.avatar %}  
-        Аватар<br>  
-        <img src="{{ user.profile.avatar.url }}" width="100" height="100" alt="Аватар">
-    {% else %}
-        <p>Аватар не загружен</p>
-    {% endif %}
-{% endif %}
+{% load static %}
 
-<nav class="navigation">
-    <a href="{% url 'settings' %}" class="nav-button">Профиль</a>
-    <a href="{% url 'tasks' %}" class="nav-button">Задачи</a>
-    <a href="{% url 'calendar' %}" class="nav-button">Календарь</a>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Настройки</title>
+    <link rel="stylesheet" href="{% static 'userProfile/css/settings.css' %}">
+</head>
+<body>
+    {% if user.is_authenticated %}
+        <h2>Ваш профиль : {{user.username}}</h2>
+        {% if user.profile.avatar %}  
+            Аватар<br>  
+            <img src="{{ user.profile.avatar.url }}" width="150" height="150" alt="Аватар">
+        {% else %}
+            <p>Аватар не загружен</p>
+        {% endif %}
+    {% endif %}
+
+    <nav class="navigation">
+        <a href="{% url 'settings' %}" class="nav-button">Профиль</a>
+        <a href="{% url 'tasks' %}" class="nav-button">Задачи</a>
+        <a href="{% url 'calendar' %}" class="nav-button">Календарь</a>
+    </nav>
     <form method="post" action="{% url 'settings' %}">
         {% csrf_token %}
-        <button type="submit" name="logout">Выйти</button>
+        <button type="submit" name="logout" class="nav-button">Выйти</button>
     </form>
-</nav>
+</body>
+</html>

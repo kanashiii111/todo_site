@@ -1,7 +1,59 @@
-<h1>Календарь</h1>
+{% load static %} 
 
-<nav class="navigation">
-    <a href="{% url 'settings' %}" class="nav-button">Профиль</a>
-    <a href="{% url 'tasks' %}" class="nav-button">Задачи</a>
-    <a href="{% url 'calendar' %}" class="nav-button">Календарь</a>
-</nav>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Календарь</title>
+    <link rel="stylesheet" href="{% static 'userProfile/css/calendar.css' %}">
+</head>
+<body>
+    <div class="calendar-container">
+        <div class="calendar-header">
+            <h2>Календарь</h2>
+            <div class="month-navigation">
+                <a href="?{{ prev_month }}">← Предыдущий месяц</a>
+                <span>{{ current_month }}</span>
+                <a href="?{{ next_month }}">Следующий месяц →</a>
+            </div>
+        </div>
+
+        <table class="calendar">
+            <thead>
+                <tr>
+                    <th>Пн</th>
+                    <th>Вт</th>
+                    <th>Ср</th>
+                    <th>Чт</th>
+                    <th>Пт</th>
+                    <th>Сб</th>
+                    <th>Вс</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for week in calendar %}
+                <tr>
+                    {% for day in week %}
+                    <td class="{% if day.month != current_month.month %}other-month{% endif %}">
+                        <div class="day-number">{{ day.day }}</div>
+                        {% for event in events %}
+                            {% if event.start_time.date == day %}
+                            <div class="event">
+                                {{ event.title }}
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <nav class="navigation">
+        <a href="{% url 'settings' %}" class="nav-button">Профиль</a>
+        <a href="{% url 'tasks' %}" class="nav-button">Задачи</a>
+        <a href="{% url 'calendar' %}" class="nav-button">Календарь</a>
+    </nav>
+</body>
+</html>
