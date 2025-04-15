@@ -24,36 +24,11 @@ body {
     text-align: center;
 }
 
-.other-month {
-    background-color: #f9f9f9;
-    color: #aaa;
-}
-
-.other-month:hover {
-    background-color: rgb(255, 255, 255);
-    cursor: pointer;
-}
-
-.day-number {
-    font-weight: bold;
-    margin-bottom: 5px;
-}
-
-.event {
-    background-color: #4CAF50;
-    color: white;
-    padding: 2px 5px;
-    border-radius: 3px;
-    margin-bottom: 2px;
-    font-size: 0.8em;
-}
-
 .month-navigation {
     display: flex;
     justify-content: space-between;
     margin-bottom: 20px;
 }
-
 
 .navigation {
     float: right;
@@ -79,4 +54,56 @@ body {
 
 .nav-button:hover {
     background-color: #45a049;
+}
+
+/* Основные стили дней */
+.current-month-day {
+    background-color: #ffffff;  /* Яркий белый фон */
+    color: #000000;            /* Черный текст */
+    font-weight: bold;         /* Жирный шрифт */
+    border: 1px solid #e0e0e0;
+    cursor: pointer;
+}
+
+.current-month-day:hover, .other-month-day:hover {
+    background-color: #f0f0f0;
+}
+
+tbody {
+    gap: 10px;
+}
+
+.other-month-day {
+    background-color: #f8f8f8;  /* Светло-серый фон */
+    color: #888888;            /* Серый текст */
+    border: 1px solid #f0f0f0;
+    cursor: pointer;
+}
+
+/* Подсветка сегодняшнего дня */
+.today-highlight {
+    background-color: #4CAF50;  /* Зеленый фон */
+    color: white;              /* Белый текст */
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Стили событий */
+.event {
+    background-color: #2196F3;  /* Синий фон */
+    color: white;
+    padding: 2px 5px;
+    border-radius: 3px;
+    margin: 2px 0;
+    font-size: 0.8em;
+}
+
+.event-other-month {
+    background-color: #bbdefb;  /* Светло-синий фон */
+    color: #0d47a1;            /* Темно-синий текст */
+    opacity: 0.8;
 }

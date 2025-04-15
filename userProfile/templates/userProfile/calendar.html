@@ -12,7 +12,7 @@
             <h2>Календарь</h2>
             <div class="month-navigation">
                 <a href="?{{ prev_month }}">← Предыдущий месяц</a>
-                <span>{{ current_month }}</span>
+                <span>{{ month_name }} {{current_month.year}}</span>
                 <a href="?{{ next_month }}">Следующий месяц →</a>
             </div>
         </div>
@@ -30,22 +30,24 @@
                 </tr>
             </thead>
             <tbody>
-                {% for week in calendar %}
-                <tr>
-                    {% for day in week %}
-                    <td class="{% if day.month != current_month.month %}other-month{% endif %}">
-                        <div class="day-number">{{ day.day }}</div>
-                        {% for event in events %}
-                            {% if event.start_time.date == day %}
-                            <div class="event">
-                                {{ event.title }}
-                            </div>
-                            {% endif %}
-                        {% endfor %}
-                    </td>
+            {% for week in calendar %}
+            <tr>
+                {% for day in week %}
+                <td class="{% if day.month == current_month.month %}current-month-day{% else %}other-month-day{% endif %}">
+                    <div class="day-number {% if day == today %}today-highlight{% endif %}">
+                        {{ day.day }}
+                    </div>
+                    {% for event in events %}
+                        {% if event.start_time.date == day %}
+                        <div class="event {% if day.month != current_month.month %}event-other-month{% endif %}">
+                            {{ event.title }}
+                        </div>
+                        {% endif %}
                     {% endfor %}
-                </tr>
+                </td>
                 {% endfor %}
+            </tr>
+            {% endfor %}
             </tbody>
         </table>
     </div>

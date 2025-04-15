@@ -27,7 +27,9 @@ INSTALLED_APPS = [
     'corsheaders',
     'users.apps.UsersConfig',
     'userProfile.apps.UserprofileConfig',
-    'crispy_forms'
+    'crispy_forms',
+    'django_filters'
+    
 ]
 
 MIDDLEWARE = [

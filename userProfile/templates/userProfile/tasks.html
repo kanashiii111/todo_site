@@ -11,8 +11,8 @@
     <div class="tasks-container">
         <h1>Список задач</h1>
         
-        {% for task in tasks %}
-            <button class="task-button" onclick="openTaskModal('{{ task.title }}', '{{ task.description }}', '{{ task.isCompleted }}', '{{ task.tag }}', '{{ task.priority }}')">
+        {% for task in filter.qs %}
+            <button class="task-button" onclick="openTaskModal('{{ task.title }}', '{{ task.description }}', '{{ task.isCompleted }}', '{{ task.tag }}', '{{ task.priority }}', '{{ task.date_due }}')">
                 {{ task.title }}
             </button>
             
@@ -24,6 +24,7 @@
                     <p>Статус: {% if task.isCompleted %}Выполнено{% else %}В работе{% endif %}</p>
                     <p>Тег: {{ task.tag }}</p>
                     <p>Приоритетность: {{ task.priority }}</p>
+                    <p>Срок выполнения: {{ task.date_due }}</p>
                 </div>
             </div>
         {% empty %}
@@ -32,6 +33,10 @@
         
         <form method="get" action="{% url 'task_creation' %}">
             <button type="submit" class="create-task-btn">Создать задачу</button>
+        </form>
+        <form method="get">
+            {{ filter.form.as_p }}
+            <button type="submit">Фильтровать</button>
         </form>
     </div>
     {% endblock %}
@@ -45,10 +50,14 @@
     </div>
 
     <script>
-        function openTaskModal(title, description, isCompleted, tag, priority) {
-            // Можно реализовать универсальное модальное окно
-            // или использовать конкретное для каждой задачи
-            alert(`Название: ${title}\nОписание: ${description}\nСтатус: ${isCompleted ? 'Выполнено' : 'В работе'}\nТег: ${tag}\nПриоритетность: ${priority}`);
+        function openTaskModal(title, description, isCompleted, tag, priority, date_due) {
+            alert(`
+            Название: ${title}\n
+            Описание: ${description}\n
+            Статус: ${isCompleted ? 'Выполнено' : 'В работе'}\n
+            Тег: ${tag}\n
+            Приоритетность: ${priority}\n
+            Срок выполнения: ${date_due}`);
         }
 
         function closeModal(modalId) {
