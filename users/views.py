@@ -3,6 +3,9 @@ from django.urls import reverse
 from django.contrib.auth import authenticate, login, logout
 from .forms import LoginUserForm, RegisterForm
 
+def home_redirect(request):
+    return redirect('users:login')
+
 def loginUser(request):
     if request.method == 'POST':
         if 'login' in request.POST:
