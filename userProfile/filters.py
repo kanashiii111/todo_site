@@ -4,15 +4,14 @@ from .models import Task
 from django import forms
 
 class TaskFilter(django_filters.FilterSet):
-    
-    date_due__lte = django_filters.DateFilter(
-        field_name='date_due',
+    dateTime_due__lte = django_filters.DateTimeFilter(
+        field_name='dateTime_due',
         lookup_expr='lte',
-        widget=forms.DateInput(
+        widget=forms.DateTimeInput(
             attrs={
-                'type': 'date',
+                'type': 'dateTime-local',
                 'class': 'form-input',
-                'min': str(timezone.now().date())
+                'min':  timezone.now().strftime('%d-%m-$YT%H:%M'),
             }
         ),
         label = 'Срок выполнения до'

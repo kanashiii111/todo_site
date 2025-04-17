@@ -9,7 +9,7 @@ class Task(models.Model):
     isCompleted = models.BooleanField(default=False)
     priority = models.IntegerField(default=0)
     tag = models.CharField(max_length=50)
-    date_due = models.DateField(default=datetime.date.today)
+    dateTime_due = models.DateTimeField(default=datetime.date.today)
     
     def __str__(self):
         return self.title

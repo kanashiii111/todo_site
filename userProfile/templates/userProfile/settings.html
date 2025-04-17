@@ -18,11 +18,11 @@
     {% endif %}
 
     <nav class="navigation">
-        <a href="{% url 'settings' %}" class="nav-button">Профиль</a>
-        <a href="{% url 'tasks' %}" class="nav-button">Задачи</a>
-        <a href="{% url 'calendar' %}" class="nav-button">Календарь</a>
+        <a href="{% url 'userProfile:settings' %}" class="nav-button">Профиль</a>
+        <a href="{% url 'userProfile:tasks' %}" class="nav-button">Задачи</a>
+        <a href="{% url 'userProfile:calendar' %}" class="nav-button">Календарь</a>
     </nav>
-    <form method="post" action="{% url 'settings' %}">
+    <form method="post" action="{% url 'userProfile:settings' %}">
         {% csrf_token %}
         <button type="submit" name="logout" class="nav-button">Выйти</button>
     </form>

@@ -1,9 +1,9 @@
-from collections import defaultdict
+from django.shortcuts import get_object_or_404
 import datetime
 from django.views.generic import ListView
 from django.shortcuts import render, HttpResponseRedirect, redirect
 from django.urls import reverse
-from .models import Task, Event
+from .models import Task
 from .forms import TaskCreationForm
 from django.contrib import messages
 from django.contrib.auth import logout
@@ -16,6 +16,10 @@ from django.utils.decorators import method_decorator
 from .filters import TaskFilter
 
 ## Настройки
+
+@login_required(login_url='users:login')
+def profileRedirect(request):
+    return redirect('userProfile:settings')
 
 @login_required(login_url='users:login')
 def settingsView(request):
@@ -32,9 +36,36 @@ class TaskListCreateView(generics.ListCreateAPIView):
     
 @login_required(login_url='users:login')
 def tasksView(request):
-    tasks = Task.objects.filter(user = request.user)
-    task_filter = TaskFilter(request.GET, queryset=tasks) 
-    return render(request, 'userProfile/tasks.html', {'tasks': tasks, 'filter': task_filter}, )
+    if request.method == 'POST':
+        if not any(request.POST.values()):
+            if 'filters' in request.session:
+                del request.session['filters']
+            return redirect('userProfile:tasks')
+
+        request.session['filters'] = request.POST
+        return redirect('userProfile:tasks')
+    elif request.method == 'POST' and 'deleteTask' in request.POST:
+        task_id = request.POST.get('deleteTask')
+        task = get_object_or_404(Task, id=task_id, user=request.user)
+        task.delete()
+        return redirect('userProfile:tasks')
+    
+    filters = request.session.get('filters', {})
+    filter = TaskFilter(filters, queryset=Task.objects.filter(user=request.user))
+    
+    context = {
+        'filter': filter,
+        'tasks': filter.qs
+    }
+
+    return render(request, 'userProfile/tasks.html', context)
+
+@login_required(login_url='users:login')
+def deleteTask(request, task_id):
+    if request.method == 'POST':
+        task = get_object_or_404(Task, id=task_id, user=request.user)
+        task.delete()
+    return redirect(request.POST.get('next', 'userProfile:tasks'))
 
 @login_required(login_url='users:login')
 def createTask(request):
@@ -42,7 +73,7 @@ def createTask(request):
         form = TaskCreationForm(request.POST, user=request.user)
         if form.is_valid():
             form.save()
-            return redirect('tasks')
+            return redirect('userProfile:tasks')
     else:
         form = TaskCreationForm(user=request.user)
     return render(request, 'userProfile/create_task.html', {'form': form})
@@ -51,39 +82,28 @@ def createTask(request):
 
 @method_decorator(login_required(login_url='users:login'), name='dispatch')
 class CalendarView(ListView):
-    model = Event
+    model = Task
     template_name = 'userProfile/calendar.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        # Получаем выбранную дату (из параметра или текущую)
         selected_date = self.get_date(self.request.GET.get('month', None))
         
-        # Создаем календарь и получаем матрицу дней
         cal = calendar.Calendar()
         month_days = cal.monthdatescalendar(selected_date.year, selected_date.month)
         
-        # Оптимизированный запрос для событий (текущий месяц + соседние дни)
-        events = Event.objects.filter(
+        tasks = Task.objects.filter(
             user=self.request.user,
-            start_time__year=selected_date.year,
-            start_time__month=selected_date.month
-        ).select_related('user').order_by('start_time')
+        ).select_related('user').order_by('dateTime_due')
         
-        # Создаем словарь событий для быстрого доступа по дате
-        events_dict = defaultdict(list)
-        for event in events:
-            events_dict[event.start_time.date()].append(event)
-        
-        # Заполняем контекст
         context.update({
             'calendar': month_days,
             'prev_month': self.prev_month(selected_date),
             'next_month': self.next_month(selected_date),
-            'current_month': selected_date,  # Объект date выбранного месяца
+            'current_month': selected_date,
             'today': datetime.date.today(),
-            'events_dict': events_dict,
+            'tasks': tasks,
             'month_name': self.get_month_name(selected_date),
         })
         return context

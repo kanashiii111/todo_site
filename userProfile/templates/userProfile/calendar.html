@@ -37,10 +37,10 @@
                     <div class="day-number {% if day == today %}today-highlight{% endif %}">
                         {{ day.day }}
                     </div>
-                    {% for event in events %}
-                        {% if event.start_time.date == day %}
-                        <div class="event {% if day.month != current_month.month %}event-other-month{% endif %}">
-                            {{ event.title }}
+                    {% for task in tasks %}
+                        {% if task.dateTime_due.date == day %}
+                        <div class="task {% if day.month != current_month.month %}task-other-month{% endif %}">
+                            {{ task.title }}
                         </div>
                         {% endif %}
                     {% endfor %}
@@ -53,9 +53,9 @@
     </div>
 
     <nav class="navigation">
-        <a href="{% url 'settings' %}" class="nav-button">Профиль</a>
-        <a href="{% url 'tasks' %}" class="nav-button">Задачи</a>
-        <a href="{% url 'calendar' %}" class="nav-button">Календарь</a>
+        <a href="{% url 'userProfile:settings' %}" class="nav-button">Профиль</a>
+        <a href="{% url 'userProfile:tasks' %}" class="nav-button">Задачи</a>
+        <a href="{% url 'userProfile:calendar' %}" class="nav-button">Календарь</a>
     </nav>
 </body>
 </html>

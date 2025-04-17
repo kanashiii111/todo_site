@@ -6,15 +6,15 @@ from .models import Task
 class TaskCreationForm(forms.ModelForm):
     class Meta:
         model = Task
-        fields = ['title', 'description', 'priority', 'tag', 'date_due']
+        fields = ['title', 'description', 'priority', 'tag', 'dateTime_due']
         widgets = {
             'title': forms.TextInput(attrs={'class': 'form-input'}),
-            'description': forms.Textarea(attrs={'class': 'form-input', 'rows': 3}),  # Textarea для описания
+            'description': forms.Textarea(attrs={'class': 'form-input', 'rows': 3}),
             'priority': forms.NumberInput(attrs={'class': 'form-input'}),
             'tag': forms.TextInput(attrs={'class': 'form-input'}),
-            'date_due': forms.DateInput(attrs={
+            'dateTime_due': forms.DateTimeInput(attrs={
                     'class': 'form-input',
-                    'type': 'date',
+                    'type': 'datetime-local',
                     'min': str(timezone.now().date()),
                 }),
         }
@@ -23,7 +23,7 @@ class TaskCreationForm(forms.ModelForm):
             'description': 'Описание',
             'priority': 'Приоритетность',
             'tag': 'Тег',
-            'date_due': 'Срок выполнения',
+            'dateTime_due': 'Срок выполнения',
         }
 
     def __init__(self, *args, **kwargs):

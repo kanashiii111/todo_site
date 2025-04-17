@@ -15,7 +15,7 @@ def loginUser(request):
                 user = authenticate(request, username=cd['username'], password=cd['password'])
                 if user and user.is_active:
                     login(request, user)
-                    return HttpResponseRedirect(reverse('tasks'))
+                    return HttpResponseRedirect(reverse('userProfile:tasks'))
         elif 'signUp' in request.POST:
             return redirect('users:register')
     else:

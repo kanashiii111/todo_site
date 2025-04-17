@@ -3,7 +3,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Настройки</title>
+    <title>Задачи</title>
     <link rel="stylesheet" href="{% static 'userProfile/css/tasks.css' %}">
 </head>
 <body>
@@ -12,57 +12,118 @@
         <h1>Список задач</h1>
         
         {% for task in filter.qs %}
-            <button class="task-button" onclick="openTaskModal('{{ task.title }}', '{{ task.description }}', '{{ task.isCompleted }}', '{{ task.tag }}', '{{ task.priority }}', '{{ task.date_due }}')">
-                {{ task.title }}
-            </button>
-            
-            <div id="modal-{{ forloop.counter }}" class="modal">
+            <div class="task-item">
+                <button class="task-button" onclick="openTaskModal({{ task.id }})">
+                    {{ task.title }}
+                </button>
+
+                <form method="post" action="{% url 'userProfile:deleteTask' task.id %}" class="delete-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.path }}">
+                    <button type="submit" class="delete-btn" onclick="return confirm('Вы уверены, что хотите удалить эту задачу?')">×</button>
+                </form>   
+
+            </div>
+
+            <div id="modal-{{ task.id }}" class="modal">
                 <div class="modal-content">
-                    <span class="close-btn" onclick="closeModal('modal-{{ forloop.counter }}')">&times;</span>
+                    <span class="close-btn" onclick="closeModal('modal-{{ task.id }}')">&times;</span>
                     <h3>Название: {{ task.title }}</h3>
                     <p>Описание: {{ task.description }}</p>
                     <p>Статус: {% if task.isCompleted %}Выполнено{% else %}В работе{% endif %}</p>
                     <p>Тег: {{ task.tag }}</p>
                     <p>Приоритетность: {{ task.priority }}</p>
-                    <p>Срок выполнения: {{ task.date_due }}</p>
+                    <p>Срок выполнения: {{ task.dateTime_due }}</p>
                 </div>
             </div>
         {% empty %}
             <p>Нет задач</p>
         {% endfor %}
         
-        <form method="get" action="{% url 'task_creation' %}">
-            <button type="submit" class="create-task-btn">Создать задачу</button>
-        </form>
-        <form method="get">
-            {{ filter.form.as_p }}
-            <button type="submit">Фильтровать</button>
-        </form>
+        <!-- Кнопка для открытия модального окна создания -->
+        <button onclick="openCreateTaskModal()" class="create-task-btn">Создать задачу</button>
+     
     </div>
     {% endblock %}
 
+    <!-- Модальное окно для создания задачи -->
+    <div id="create-task-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal('create-task-modal')">&times;</span>
+            <h2>Создать новую задачу</h2>
+            <form method="post" action="{% url 'userProfile:task_creation' %}">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="title">Название:</label>
+                    <input type="text" id="title" name="title" required>
+                </div>
+                <div class="form-group">
+                    <label for="description">Описание:</label>
+                    <textarea id="description" name="description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="tag">Тег:</label>
+                    <input type="text" id="tag" name="tag">
+                </div>
+                <div class="form-group">
+                    <label for="priority">Приоритетность:</label>
+                    <input type="number" id="priority" name="priority" min="1" step="1" value="5">
+                </div>
+                <div class="form-group">
+                    <label for="date_due">Срок выполнения:</label>
+                    <input type="datetime-local" id="dateTime_due" name="dateTime_due">
+                </div>
+                <button type="submit" class="submit-btn">Создать</button>
+            </form>
+        </div>
+    </div>
+
     <div class="navigation-container">
         <nav class="navigation">
-            <a href="{% url 'settings' %}" class="nav-button">Профиль</a>
-            <a href="{% url 'tasks' %}" class="nav-button">Задачи</a>
-            <a href="{% url 'calendar' %}" class="nav-button">Календарь</a>
+            <a href="{% url 'userProfile:settings' %}" class="nav-button">Профиль</a>
+            <a href="{% url 'userProfile:tasks' %}" class="nav-button">Задачи</a>
+            <a href="{% url 'userProfile:calendar' %}" class="nav-button">Календарь</a>
         </nav>
     </div>
 
     <script>
-        function openTaskModal(title, description, isCompleted, tag, priority, date_due) {
-            alert(`
-            Название: ${title}\n
-            Описание: ${description}\n
-            Статус: ${isCompleted ? 'Выполнено' : 'В работе'}\n
-            Тег: ${tag}\n
-            Приоритетность: ${priority}\n
-            Срок выполнения: ${date_due}`);
+        // Функция для открытия модального окна просмотра задачи
+        function openTaskModal(taskId) {
+            document.getElementById('modal-' + taskId).style.display = 'block';
         }
 
+        // Функция для открытия модального окна создания задачи
+        function openCreateTaskModal() {
+            document.getElementById('create-task-modal').style.display = 'block';
+        }
+
+        // Функция для закрытия модального окна
         function closeModal(modalId) {
             document.getElementById(modalId).style.display = 'none';
         }
+
+        // Закрытие модального окна при клике вне его
+        window.onclick = function(event) {
+            if (event.target.className === 'modal') {
+                event.target.style.display = 'none';
+            }
+        }
+        document.getElementById('filter-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+    
+            // Собираем только заполненные поля
+            const formData = new FormData(this);
+            const params = new URLSearchParams();
+            
+            for (const [key, value] of formData.entries()) {
+                if (value !== '') {
+                    params.append(key, value);
+                }
+            }
+            
+            // Переходим по новому URL без пустых параметров
+            window.location.href = '{% url "userProfile:tasks" %}' + (params.toString() ? '?' + params.toString() : '');
+        });
     </script>
 </body>
 </html>
