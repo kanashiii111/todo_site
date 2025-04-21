@@ -10,4 +10,6 @@ urlpatterns = [
     path('profile/tasks/', views.tasksView, name='tasks'),
     path('profile/tasks/delete/<int:task_id>/', views.deleteTask, name = 'deleteTask'),
     path('profile/tasks/task_creation/', views.createTask, name='task_creation'),
+    path('task_edit/<int:task_id>/', views.editTask, name='task_edit'),
+    path('get-task-data/<int:task_id>/', views.get_task_data, name='get_task_data'),
 ]

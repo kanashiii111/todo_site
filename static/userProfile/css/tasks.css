@@ -46,6 +46,48 @@ h1 {
     color: black;
 }
 
+/* Стили для стандартных select */
+select.form-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: white;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 1em;
+}
+
+select.form-input:focus {
+    outline: none;
+    border-color: #4CAF50;
+}
+
+/* Стили для option */
+select.form-input option {
+    padding: 8px;
+}
+
+/* Стили для редактирования */
+
+.edit-btn {
+    background-color: #4CAF50;
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 15px;
+}
+
+.edit-btn:hover {
+    background-color: #45a049;
+}
+
 /* Стили для формы создания задачи */
 .form-group {
     margin-bottom: 15px;
@@ -85,6 +127,60 @@ h1 {
 
 .submit-btn:hover {
     background-color: #45a049;
+}
+
+/* Стили для кнопки выполнения задачи */
+
+.task-item {
+    display: flex;
+    align-items: center;
+    margin: 8px 0;
+    gap: 8px;
+}
+
+.complete-form {
+    margin: 0;
+}
+
+.complete-btn {
+    width: 24px;
+    height: 24px;
+    border: 2px solid #28a745;
+    border-radius: 50%;
+    background: none;
+    color: #28a745;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.complete-btn:hover {
+    background: rgba(40, 167, 69, 0.1);
+}
+
+.task-item.completed .task-title {
+    text-decoration: line-through;
+    color: #6c757d;
+}
+
+.task-item.completed .complete-btn {
+    background: #28a745;
+    color: white;
+}
+
+.task-button {
+    flex-grow: 1;
+    text-align: left;
+    padding: 10px;
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
 }
 
 /* Остальные стили */

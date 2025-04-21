@@ -1,31 +1,21 @@
 from django.utils import timezone
 import django_filters
 from .models import Task
+from .forms import SUBJECT_CHOICES, TASKTYPE_CHOICES
 from django import forms
 
 class TaskFilter(django_filters.FilterSet):
-    dateTime_due__lte = django_filters.DateTimeFilter(
-        field_name='dateTime_due',
-        lookup_expr='lte',
-        widget=forms.DateTimeInput(
-            attrs={
-                'type': 'dateTime-local',
-                'class': 'form-input',
-                'min':  timezone.now().strftime('%d-%m-$YT%H:%M'),
-            }
-        ),
-        label = 'Срок выполнения до'
+    taskType__exact = django_filters.ChoiceFilter(
+        choices=TASKTYPE_CHOICES,
+        field_name='taskType',
+        lookup_expr='exact',
+        label='Задача'
     )
-    
-    priority__gte = django_filters.NumberFilter(
-        field_name = 'priority',
-        lookup_expr= 'gte',
-        label = 'Приоритет'
-    )
-    
-    tag__exact = django_filters.CharFilter(
-        field_name = 'tag',
+
+    subject__exact = django_filters.ChoiceFilter(
+        choices=SUBJECT_CHOICES,
+        field_name = 'subject',
         lookup_expr= 'exact',
-        label = 'Тег',
+        label = 'Предмет',
     )
     
