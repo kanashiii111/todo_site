@@ -53,6 +53,25 @@
     </div>
 
     <nav class="navigation">
+
+        <a href="{% url 'userProfile:settings' %}" class="user-profile-link">
+            <div class="user-profile-bar">
+                {% if user.is_authenticated %}
+                    {% if user.profile.avatar %}
+                        <img src="{{ user.profile.avatar.url }}" alt='Аватар' class='user-avatar'>
+                    {% else %} 
+                        <img src='https://static-00.iconduck.com/assets.00/profile-default-icon-1024x1023-4u5mrj2v.png' alt="Аватар" class="user-avatar">
+                    {% endif %}
+                    <div class="user-info">
+                        <div class="username">{{ user.username }}</div>
+                        <div class="user-status">
+                            {% if user.profile.status %} {{ user.profile.status }} {% else %}Статус{% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </a>
+
         <a href="{% url 'userProfile:settings' %}" class="nav-button">Профиль</a>
         <a href="{% url 'userProfile:tasks' %}" class="nav-button">Задачи</a>
         <a href="{% url 'userProfile:calendar' %}" class="nav-button">Календарь</a>

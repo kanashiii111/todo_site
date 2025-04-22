@@ -19,11 +19,10 @@ TASKTYPE_CHOICES = {
 class TaskCreationForm(forms.ModelForm):
     class Meta:
         model = Task
-        fields = ['title', 'description', 'priority', 'subject', 'taskType', 'dateTime_due']
+        fields = ['title', 'description', 'subject', 'taskType', 'dateTime_due']
         widgets = {
             'title': forms.TextInput(attrs={'class': 'form-input'}),
             'description': forms.Textarea(attrs={'class': 'form-input', 'rows': 3}),
-            'priority': forms.NumberInput(attrs={'class': 'form-input'}),
             'subject': forms.Select(
                 attrs={'class' : 'form-input'},
                 choices=SUBJECT_CHOICES,
@@ -41,7 +40,6 @@ class TaskCreationForm(forms.ModelForm):
         labels = {
             'title': 'Название',
             'description': 'Описание',
-            'priority': 'Приоритетность',
             'subject' : 'Предмет',
             'taskType' : 'Задача',
             'dateTime_due': 'Срок выполнения',

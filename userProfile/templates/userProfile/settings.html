@@ -13,7 +13,12 @@
             Аватар<br>  
             <img src="{{ user.profile.avatar.url }}" width="150" height="150" alt="Аватар">
         {% else %}
-            <p>Аватар не загружен</p>
+            <img src="https://static-00.iconduck.com/assets.00/profile-default-icon-1024x1023-4u5mrj2v.png" width="150" height="150" alt="Дефолтный Аватар">
+        {% endif %}
+        {% if user.profile.status %}
+            {{ user.profile.status }}
+        {% else %}
+            <p> Статус </p>
         {% endif %}
     {% endif %}
 

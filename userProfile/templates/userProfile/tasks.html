@@ -52,7 +52,6 @@
                         <h3>{{ task.title }}</h3>
                         <p><strong>Описание:</strong> {{ task.description|default:"-" }}</p>
                         <p><strong>Статус:</strong> {% if task.isCompleted %}Выполнено{% else %}В работе{% endif %}</p>
-                        <p><strong>Приоритет:</strong> {{ task.priority }}</p>
                         <p><strong>Срок:</strong> {{ task.dateTime_due|date:"d.m.Y H:i" }}</p>
                         <p><strong>Предмет:</strong> {{ task.subject }}</p>
                         <p><strong>Задача:</strong> {{ task.taskType }}</p>
@@ -80,11 +79,6 @@
                     <div class="form-group">
                         <label for="edit-description">Описание:</label>
                         <textarea id="edit-description" name="description"></textarea>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="edit-priority">Приоритетность:</label>
-                        <input type="number" id="edit-priority" name="priority" min="1" step="1">
                     </div>
                     
                     <div class="form-row">
@@ -145,10 +139,6 @@
                     <label for="description">Описание:</label>
                     <textarea id="description" name="description"></textarea>
                 </div>
-                <div class="form-group">
-                    <label for="priority">Приоритетность:</label>
-                    <input type="number" id="priority" name="priority" min="1" step="1" value="5">
-                </div>
 
                 <div class="form-row">
                     <div class="form-group">
@@ -172,6 +162,24 @@
     </div>
 
     <div class="navigation-container">
+        <a href="{% url 'userProfile:settings' %}" class="user-profile-link">
+            <div class="user-profile-bar">
+                {% if user.is_authenticated %}
+                    {% if user.profile.avatar %}
+                        <img src="{{ user.profile.avatar.url }}" alt='Аватар' class='user-avatar'>
+                    {% else %} 
+                        <img src='https://static-00.iconduck.com/assets.00/profile-default-icon-1024x1023-4u5mrj2v.png' alt="Аватар" class="user-avatar">
+                    {% endif %}
+                    <div class="user-info">
+                        <div class="username">{{ user.username }}</div>
+                        <div class="user-status">
+                            {% if user.profile.status %} {{ user.profile.status }} {% else %}Статус{% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </a>
+
         <nav class="navigation">
             <a href="{% url 'userProfile:settings' %}" class="nav-button">Профиль</a>
             <a href="{% url 'userProfile:tasks' %}" class="nav-button">Задачи</a>
@@ -203,7 +211,6 @@
                     document.getElementById('edit-task-id').value = taskId;
                     document.getElementById('edit-title').value = data.title;
                     document.getElementById('edit-description').value = data.description;
-                    document.getElementById('edit-priority').value = data.priority;
                     document.getElementById('edit-subject').value = data.subject;
                     document.getElementById('edit-taskType').value = data.taskType;
                     

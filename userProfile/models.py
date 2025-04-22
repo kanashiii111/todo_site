@@ -7,7 +7,6 @@ class Task(models.Model):
     title = models.CharField(max_length=50)
     description = models.CharField(max_length=50)
     isCompleted = models.BooleanField(default=False)
-    priority = models.IntegerField(default=0)
     subject = models.CharField(max_length=50)
     taskType = models.CharField(max_length=50)
     dateTime_due = models.DateTimeField(default=datetime.date.today)

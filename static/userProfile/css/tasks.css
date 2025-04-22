@@ -183,6 +183,40 @@ select.form-input option {
     justify-content: space-between;
 }
 
+/* Плашка с пользователем */
+
+.user-profile-bar {
+    display: flex;
+    align-items: center;
+    padding: 10px 15px;
+    background-color: #f5f5f5;
+    border-bottom: 1px solid #ddd;
+    margin-bottom: 10px;
+}
+
+.user-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-right: 10px;
+    border: 2px solid #ddd;
+}
+
+.user-info {
+    flex-grow: 1;
+}
+
+.username {
+    font-weight: bold;
+    margin-bottom: 2px;
+}
+
+.user-status {
+    font-size: 0.8em;
+    color: #666;
+}
+
 /* Остальные стили */
 .task-item {
     display: flex;
