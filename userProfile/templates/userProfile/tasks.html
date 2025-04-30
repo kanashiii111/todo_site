@@ -11,6 +11,18 @@
 
     <div class="tasks-container">
     <h1>Мои задачи</h1>
+
+    <!-- Форма поиска -->
+    <div class="search-container">
+        <form method="get" action="{% url 'userProfile:tasks' %}">
+            <input type="text" name="search" placeholder="Поиск по названию или описанию..." 
+                   value="{{ search_query }}" class="search-input">
+            <button type="submit" class="search-btn">Найти</button>
+            {% if search_query %}
+                <a href="{% url 'userProfile:tasks' %}" class="clear-search">Сбросить</a>
+            {% endif %}
+        </form>
+    </div>
     
         {% for day in days %}
             <div class="day-container">

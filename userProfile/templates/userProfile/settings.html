@@ -20,6 +20,24 @@
         {% else %}
             <p> Статус </p>
         {% endif %}
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            
+            <!-- Поле для chat_id -->
+            <div class="form-group">
+                <label for="id_telegram_chat_id">Telegram Chat ID</label>
+                {{ form.telegram_chat_id }}
+                <small class="form-text text-muted">
+                    <br>Чтобы получить Chat ID:<br>
+                    1. Напишите боту @MyTaskNotifier команду <code>/start</code><br>
+                    2. Скопируйте полученный номер<br>
+                    3. Вставьте его в это поле
+                </small>
+            </div>
+
+            <!-- Кнопка сохранения -->
+            <button type="submit" class="btn btn-primary">Сохранить</button>
+        </form>
     {% endif %}
 
     <nav class="navigation">

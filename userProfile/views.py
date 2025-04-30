@@ -1,3 +1,4 @@
+import json
 from django.shortcuts import get_object_or_404
 from django.views.generic import ListView
 from django.shortcuts import render, HttpResponseRedirect, redirect
@@ -14,6 +15,13 @@ import calendar
 from django.utils.decorators import method_decorator
 from .filters import TaskFilter
 from datetime import datetime, timedelta, date
+from django.db.models import Q
+import requests
+from django.views.decorators.csrf import csrf_exempt
+from users.forms import ProfileForm
+from users.models import Profile
+import todo_site.settings
+
 
 ## Настройки
 
@@ -23,10 +31,19 @@ def profileRedirect(request):
 
 @login_required(login_url='users:login')
 def settingsView(request):
-    if request.method == 'POST' and 'logout' in request.POST:
-        logout(request)
-        return HttpResponseRedirect(reverse('users:login'))
-    return render(request, 'userProfile/settings.html')
+    profile = request.user.profile
+    
+    if request.method == 'POST':
+        if 'logout' in request.POST:
+            logout(request)
+            return HttpResponseRedirect(reverse('users:login'))
+        form = ProfileForm(request.POST, instance=profile)
+        if form.is_valid():
+            form.save()
+            return redirect('userProfile:settings')
+    else:
+        form = ProfileForm(instance=profile)
+    return render(request, 'userProfile/settings.html', {'form': form})
     
 ## Задачи   
 
@@ -48,6 +65,16 @@ def tasksView(request):
             task.isCompleted = not task.isCompleted
             task.save()
         return redirect('userProfile:tasks')
+    
+    search_query = request.GET.get('search', '')
+    
+    # Фильтруем задачи по пользователю и поисковому запросу
+    tasks = Task.objects.filter(user=request.user)
+    
+    if search_query:
+        tasks = tasks.filter(
+            Q(title__icontains=search_query) | 
+            Q(description__icontains=search_query))
 
     task_filter = TaskFilter(request.GET, queryset=Task.objects.filter(user=request.user))
     tasks = task_filter.qs.order_by('dateTime_due')
@@ -75,6 +102,7 @@ def tasksView(request):
         'TASKTYPE_CHOICES': TASKTYPE_CHOICES,
         'form' : TaskCreationForm(user = request.user),
         'filter' : task_filter,
+        'search_query' : search_query,
     }
 
     return render(request, 'userProfile/tasks.html', context)
@@ -121,11 +149,41 @@ def get_task_data(request, task_id):
     return JsonResponse({
         'title': task.title,
         'description': task.description,
-        'priority': task.priority,
         'subject': task.subject,
         'taskType': task.taskType,
         'dateTime_due': task.dateTime_due.isoformat(),
     })
+    
+@csrf_exempt
+def telegram_webhook(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        message = data.get("message", {})
+        
+        # Если пользователь отправил /start
+        if message.get("text") == "/start":
+            chat_id = message["chat"]["id"]
+            response_text = (
+                f"🔑 Ваш Telegram Chat ID: `{chat_id}`\n\n"
+                "1. Скопируйте этот номер\n"
+                "2. Вставьте его в поле 'Telegram Chat ID' на сайте\n"
+                "3. Сохраните изменения\n\n"
+                "Теперь вы будете получать уведомления о задачах!"
+            )
+            
+            # Отправляем ответ пользователю
+            requests.post(
+                f"https://api.telegram.org/bot{todo_site.settings.TELEGRAM_BOT_TOKEN}/sendMessage",
+                json={
+                    "chat_id": chat_id,
+                    "text": response_text,
+                    "parse_mode": "Markdown"
+                }
+            )
+        
+        return JsonResponse({"status": "ok"})
+    
+    return JsonResponse({"status": "error"}, status=400)
 
 ## Календарь
 
@@ -154,6 +212,9 @@ class CalendarView(ListView):
             'today': date.today(),
             'tasks': tasks,
             'month_name': self.get_month_name(selected_date),
+            'SUBJECT_CHOICES': SUBJECT_CHOICES,
+            'TASKTYPE_CHOICES': TASKTYPE_CHOICES,
+            'form' : TaskCreationForm(user = self.request.user),
         })
         return context
 
@@ -161,7 +222,7 @@ class CalendarView(ListView):
         """Парсит дату из параметра запроса или возвращает текущую дату"""
         if req_month:
             year, month = map(int, req_month.split('-'))
-            return datetime.date(year, month, day=1)
+            return date(year, month, day=1)
         return date.today()
 
     def prev_month(self, d):

@@ -9,6 +9,8 @@ class Profile(models.Model):
     status = models.CharField(default='', blank=True, null=True)
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
     tasks = models.ManyToManyField(Task)
+    telegram_chat_id = models.CharField(max_length=50, blank=True, null=True)
+    telegram_notifications = models.BooleanField(default=False)
     
     def __str__(self):
         return self.user.username

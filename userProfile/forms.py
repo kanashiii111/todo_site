@@ -1,7 +1,9 @@
 from datetime import *
 from django.utils import timezone
 from django import forms
-from .models import Task
+
+from users.models import Profile
+from .models import Task, TaskReminder
 
 SUBJECT_CHOICES = {
     "Программирование" : "Программирование",
@@ -17,6 +19,23 @@ TASKTYPE_CHOICES = {
 }
 
 class TaskCreationForm(forms.ModelForm):
+    
+    remind_before_days = forms.IntegerField(
+        label="Напомнить за (дней)",
+        initial=1,
+        min_value=0,
+        required=False,
+        widget=forms.NumberInput(attrs={'class': 'form-input'})
+    )
+    repeat_reminder = forms.IntegerField(
+        label="Повторять напоминание каждые (дней)",
+        initial=0,
+        min_value=0,
+        required=False,
+        widget=forms.NumberInput(attrs={'class': 'form-input'}),
+        help_text="0 - не повторять"
+    )
+    
     class Meta:
         model = Task
         fields = ['title', 'description', 'subject', 'taskType', 'dateTime_due']
@@ -66,4 +85,18 @@ class TaskCreationForm(forms.ModelForm):
             instance.user = self.user
         if commit:
             instance.save()
+            
+            # Создаем или обновляем напоминание
+            remind_before = self.cleaned_data.get('remind_before_days', 1)
+            repeat_interval = self.cleaned_data.get('repeat_reminder', 0)
+            
+            TaskReminder.objects.update_or_create(
+                instance=instance,
+                defaults={
+                    'remind_before_days': remind_before,
+                    'repeat_interval': repeat_interval,
+                    'is_active': remind_before > 0
+                }
+            )
+            
         return instance

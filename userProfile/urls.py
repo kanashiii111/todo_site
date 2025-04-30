@@ -12,4 +12,5 @@ urlpatterns = [
     path('profile/tasks/task_creation/', views.createTask, name='task_creation'),
     path('task_edit/<int:task_id>/', views.editTask, name='task_edit'),
     path('get-task-data/<int:task_id>/', views.get_task_data, name='get_task_data'),
+    path("webhook/telegram/", views.telegram_webhook, name="telegram_webhook"),
 ]

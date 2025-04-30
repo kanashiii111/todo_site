@@ -8,6 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY")
+TELEGRAM_BOT_TOKEN = '7707844406:AAFo5bXTLD_lq2ddh0Lce1w--690uPe_T2Q'
 
 DEBUG=True
 
@@ -123,11 +124,12 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'ru-RU'
 
 TIME_ZONE = 'UTC'
 
 USE_I18N = True
+USE_L10N = True
 
 USE_TZ = True
 

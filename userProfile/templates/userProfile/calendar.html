@@ -39,8 +39,74 @@
                     </div>
                     {% for task in tasks %}
                         {% if task.dateTime_due.date == day %}
-                        <div class="task {% if day.month != current_month.month %}task-other-month{% endif %}">
+                        <div class="task {% if day.month != current_month.month %}task-other-month{% endif %}" onclick="openTaskModal('modal-{{ task.id }}')"> 
                             {{ task.title }}
+                        </div>
+                        <form method="post" action="{% url 'userProfile:deleteTask' task.id %}" class="delete-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="next" value="{{ request.path }}">
+                            <button type="submit" class="delete-btn" onclick="return confirm('Удалить эту задачу?')">×</button>
+                        </form>
+                        <div id="modal-{{ task.id }}" class="modal" style="display:none;">
+                            <div class="modal-content">
+                                <span class="close-btn" onclick="closeModal('modal-{{ task.id }}')">&times;</span>
+                                <h3>{{ task.title }}</h3>
+                                <p><strong>Описание:</strong> {{ task.description }}</p>
+                                <p><strong>Срок выполнения:</strong> {{ task.dateTime_due }}</p>
+                                <p><strong>Предмет:</strong> {{ task.subject }}</p>
+                                <p><strong>Тип задачи:</strong> {{ task.taskType }}</p>
+                                <button onclick="openEditTaskModal({{ task.id }})" class="edit-btn">Редактировать</button>
+                            </div>
+                        </div>
+
+                        <!-- Модальное окно редактирования задачи -->
+
+                        <div id="edit-task-modal" class="modal">
+                            <div class="modal-content">
+                                <span class="close-btn" onclick="closeModal('edit-task-modal')">&times;</span>
+                                <h2>Редактировать задачу</h2>
+                                <form method="post" action="{% url 'userProfile:task_edit' 0 %}" id="edit-task-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="task_id" id="edit-task-id">
+                                    
+                                    <div class="form-group">
+                                        <label for="edit-title">Название:</label>
+                                        <input type="text" id="edit-title" name="title" required>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label for="edit-description">Описание:</label>
+                                        <textarea id="edit-description" name="description"></textarea>
+                                    </div>
+                                    
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="edit-subject">Предмет:</label>
+                                            <select id="edit-subject" name="subject">
+                                                {% for value, name in SUBJECT_CHOICES.items %}
+                                                    <option value="{{ value }}">{{ name }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label for="edit-taskType">Тип задачи:</label>
+                                            <select id="edit-taskType" name="taskType">
+                                                {% for value, name in TASKTYPE_CHOICES.items %}
+                                                    <option value="{{ value }}">{{ name }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label for="edit-dateTime_due">Срок выполнения:</label>
+                                        <input type="datetime-local" id="edit-dateTime_due" name="dateTime_due">
+                                    </div>
+                                    
+                                    <button type="submit" class="submit-btn">Сохранить</button>
+                                </form>
+                            </div>
                         </div>
                         {% endif %}
                     {% endfor %}
@@ -50,6 +116,50 @@
             {% endfor %}
             </tbody>
         </table>
+    </div>
+
+    <!-- Кнопка создания задачи -->
+    <button onclick="openCreateTaskModal()" class="create-task-btn">+ Новая задача</button>
+
+    <form method = 'get' id='filter-form'>
+        {{ filter.form.as_p }}
+    </form>
+
+    <!-- Модальное окно для создания задачи -->
+    <div id="create-task-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal('create-task-modal')">&times;</span>
+            <h2>Создать новую задачу</h2>
+            <form method="post" action="{% url 'userProfile:task_creation' %}">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="title">Название:</label>
+                    <input type="text" id="title" name="title" required>
+                </div>
+                <div class="form-group">
+                    <label for="description">Описание:</label>
+                    <textarea id="description" name="description"></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="subject">Предмет:</label>
+                        {{ form.subject }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="taskType">Тип задачи:</label>
+                        {{ form.taskType }}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="date_due">Срок выполнения:</label>
+                    <input type="datetime-local" id="dateTime_due" name="dateTime_due">
+                </div>
+                <button type="submit" class="submit-btn">Создать</button>
+            </form>
+        </div>
     </div>
 
     <nav class="navigation">
@@ -76,5 +186,54 @@
         <a href="{% url 'userProfile:tasks' %}" class="nav-button">Задачи</a>
         <a href="{% url 'userProfile:calendar' %}" class="nav-button">Календарь</a>
     </nav>
+    <script>
+        // Функция для открытия модального окна просмотра задачи
+        function openTaskModal(modalId) {
+            document.getElementById(modalId).style.display = 'block';
+        }
+        // Функция для открытия модального окна создания задачи
+        function openCreateTaskModal() {
+            document.getElementById('create-task-modal').style.display = 'block';
+        }
+        // Функция для закрытия модального окна
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        // Закрытие модального окна при клике вне его
+        window.onclick = function(event) {
+            if (event.target.className === 'modal') {
+                event.target.style.display = 'none';
+            }
+        }
+        // Функция для открытия модального окна редактирования
+        function openEditTaskModal(taskId) {
+            // Закрываем текущее модальное окно
+            closeModal('modal-' + taskId);
+            
+            // Получаем данные задачи (можно через AJAX или из data-атрибутов)
+            fetch(`/get-task-data/${taskId}/`)
+                .then(response => response.json())
+                .then(data => {
+                    // Заполняем форму данными
+                    document.getElementById('edit-task-id').value = taskId;
+                    document.getElementById('edit-title').value = data.title;
+                    document.getElementById('edit-description').value = data.description;
+                    document.getElementById('edit-subject').value = data.subject;
+                    document.getElementById('edit-taskType').value = data.taskType;
+                    
+                    // Форматируем дату для datetime-local input
+                    const dueDate = new Date(data.dateTime_due);
+                    const formattedDate = dueDate.toISOString().slice(0, 16);
+                    document.getElementById('edit-dateTime_due').value = formattedDate;
+                    
+                    // Обновляем action формы
+                    document.getElementById('edit-task-form').action = `/task_edit/${taskId}/`;
+                    
+                    // Открываем модальное окно редактирования
+                    document.getElementById('edit-task-modal').style.display = 'block';
+                });
+        }
+    </script>
 </body>
 </html>
