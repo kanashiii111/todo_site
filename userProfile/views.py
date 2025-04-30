@@ -4,7 +4,7 @@ from django.views.generic import ListView
 from django.shortcuts import render, HttpResponseRedirect, redirect
 from django.http import JsonResponse
 from django.urls import reverse
-from .models import Task
+from .models import Task, TaskReminder
 from .forms import TaskCreationForm, SUBJECT_CHOICES, TASKTYPE_CHOICES
 from django.contrib.auth import logout
 from django.contrib.auth.models import User
@@ -14,13 +14,14 @@ from rest_framework import generics
 import calendar
 from django.utils.decorators import method_decorator
 from .filters import TaskFilter
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from django.db.models import Q
 import requests
 from django.views.decorators.csrf import csrf_exempt
 from users.forms import ProfileForm
 from users.models import Profile
 import todo_site.settings
+from django.core.management.base import BaseCommand
 
 
 ## Настройки
@@ -29,21 +30,142 @@ import todo_site.settings
 def profileRedirect(request):
     return redirect('userProfile:settings')
 
+@csrf_exempt
+def telegram_webhook(request):
+    if request.user.profile.telegram_notifications == False: return
+    if request.method == "POST":
+        data = json.loads(request.body)
+        message = data.get("message", {})
+        
+        if message.get("text") == "/start":
+            chat_id = message["chat"]["id"]
+            response_text = (
+                f"🔑 Ваш Telegram Chat ID: `{chat_id}`\n\n"
+                "1. Скопируйте этот номер\n"
+                "2. Вставьте его в поле 'Telegram Chat ID' на сайте\n"
+                "3. Сохраните изменения\n\n"
+                "Теперь вы будете получать уведомления о задачах!"
+            )
+            
+            requests.post(
+                f"https://api.telegram.org/bot{todo_site.settings.TELEGRAM_BOT_TOKEN}/sendMessage",
+                json={
+                    "chat_id": chat_id,
+                    "text": response_text,
+                    "parse_mode": "Markdown"
+                }
+            )
+        
+        return JsonResponse({"status": "ok"})
+    
+    return JsonResponse({"status": "error"}, status=400)
+
+def send_telegram_message(chat_id, text):
+    url = f"https://api.telegram.org/bot{todo_site.settings.TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        'chat_id': chat_id,
+        'text': text,
+        'parse_mode': 'HTML'
+    }
+    try:
+        response = requests.post(url, json=payload)
+        response.raise_for_status()  # Проверка на ошибки HTTP
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"Ошибка отправки в Telegram: {e}")
+        return False
+
+class Command(BaseCommand):
+    help = 'Send task reminders to users'
+
+    def handle(self, *args, **options):
+        now = timezone.now()
+        reminders = TaskReminder.objects.filter(
+            is_active=True,
+            task__isCompleted=False
+        ).select_related('task')
+
+        for reminder in reminders:
+            task = reminder.task
+            remind_date = task.dateTime_due - timezone.timedelta(days=reminder.remind_before_days)
+            
+            # Проверяем, нужно ли отправлять напоминание
+            if now >= remind_date and (
+                reminder.last_reminder_sent is None or 
+                reminder.last_reminder_sent < remind_date
+            ):
+                # Отправляем напоминание
+                message = f"⏰ Напоминание: {task.title}\n" \
+                     f"📅 Срок: {task.dateTime_due.strftime('%d.%m.%Y %H:%M')}\n" \
+                     f"📝 {task.description or '-'}"
+            
+                if reminder.task.user.profile.telegram_notifications and reminder.task.user.profile.telegram_chat_id:
+                    try:
+                        send_telegram_message(
+                            reminder.task.user.profile.telegram_chat_id,
+                            message
+                        )
+                    except Exception as e:
+                        self.stdout.write(f"Ошибка отправки в Telegram: {e}")
+                        
+                reminder.last_reminder_sent = now
+                reminder.save()
+
+                # Если это повторяющееся напоминание, обновляем дату
+                if reminder.repeat_interval > 0:
+                    new_remind_days = reminder.remind_before_days + reminder.repeat_interval
+                    if new_remind_days < (task.dateTime_due - now).days:
+                        reminder.remind_before_days = new_remind_days
+                        reminder.save()
+                    else:
+                        reminder.is_active = False
+                        reminder.save()
+
 @login_required(login_url='users:login')
 def settingsView(request):
-    profile = request.user.profile
-    
+    profile = get_object_or_404(Profile, user=request.user)
+
     if request.method == 'POST':
         if 'logout' in request.POST:
             logout(request)
             return HttpResponseRedirect(reverse('users:login'))
-        form = ProfileForm(request.POST, instance=profile)
-        if form.is_valid():
-            form.save()
-            return redirect('userProfile:settings')
-    else:
-        form = ProfileForm(instance=profile)
-    return render(request, 'userProfile/settings.html', {'form': form})
+        if 'setTelegramNotis' in request.POST:
+            profile.telegram_notifications = not profile.telegram_notifications
+            profile.save() 
+            return redirect("userProfile:settings")
+        if 'save_chat_id' in request.POST:
+            new_chat_id = request.POST.get("telegram_chat_id", '').strip()
+            if new_chat_id:
+                profile.telegram_chat_id = new_chat_id
+                profile.save() 
+                return redirect("userProfile:settings")
+        if 'sendmsg' in request.POST:
+            if profile.telegram_notifications != False:
+                chat_id = profile.telegram_chat_id
+                response_text = "Тест отправки сообщения"
+                requests.post(
+                    f"https://api.telegram.org/bot{todo_site.settings.TELEGRAM_BOT_TOKEN}/sendMessage",
+                    json={
+                        "chat_id": chat_id,
+                        "text": response_text,
+                        "parse_mode": "Markdown"
+                    }
+                )
+            else:
+                chat_id = profile.telegram_chat_id
+                response_text = "Галочка не нажата"
+                requests.post(
+                    f"https://api.telegram.org/bot{todo_site.settings.TELEGRAM_BOT_TOKEN}/sendMessage",
+                    json={
+                        "chat_id": chat_id,
+                        "text": response_text,
+                        "parse_mode": "Markdown"
+                    }
+                )
+                
+    
+    form = ProfileForm(instance=profile)
+    return render(request, 'userProfile/settings.html', {'profile' : profile, 'form' : form})
     
 ## Задачи   
 
@@ -70,6 +192,7 @@ def tasksView(request):
     
     # Фильтруем задачи по пользователю и поисковому запросу
     tasks = Task.objects.filter(user=request.user)
+    profile = request.user.profile
     
     if search_query:
         tasks = tasks.filter(
@@ -103,6 +226,7 @@ def tasksView(request):
         'form' : TaskCreationForm(user = request.user),
         'filter' : task_filter,
         'search_query' : search_query,
+        'profile' : profile,
     }
 
     return render(request, 'userProfile/tasks.html', context)
@@ -153,37 +277,6 @@ def get_task_data(request, task_id):
         'taskType': task.taskType,
         'dateTime_due': task.dateTime_due.isoformat(),
     })
-    
-@csrf_exempt
-def telegram_webhook(request):
-    if request.method == "POST":
-        data = json.loads(request.body)
-        message = data.get("message", {})
-        
-        # Если пользователь отправил /start
-        if message.get("text") == "/start":
-            chat_id = message["chat"]["id"]
-            response_text = (
-                f"🔑 Ваш Telegram Chat ID: `{chat_id}`\n\n"
-                "1. Скопируйте этот номер\n"
-                "2. Вставьте его в поле 'Telegram Chat ID' на сайте\n"
-                "3. Сохраните изменения\n\n"
-                "Теперь вы будете получать уведомления о задачах!"
-            )
-            
-            # Отправляем ответ пользователю
-            requests.post(
-                f"https://api.telegram.org/bot{todo_site.settings.TELEGRAM_BOT_TOKEN}/sendMessage",
-                json={
-                    "chat_id": chat_id,
-                    "text": response_text,
-                    "parse_mode": "Markdown"
-                }
-            )
-        
-        return JsonResponse({"status": "ok"})
-    
-    return JsonResponse({"status": "error"}, status=400)
 
 ## Календарь
 

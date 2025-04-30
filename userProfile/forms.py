@@ -19,7 +19,6 @@ TASKTYPE_CHOICES = {
 }
 
 class TaskCreationForm(forms.ModelForm):
-    
     remind_before_days = forms.IntegerField(
         label="Напомнить за (дней)",
         initial=1,
@@ -34,6 +33,11 @@ class TaskCreationForm(forms.ModelForm):
         required=False,
         widget=forms.NumberInput(attrs={'class': 'form-input'}),
         help_text="0 - не повторять"
+    )
+    reminder_time = forms.TimeField(
+        label="Время напоминания",
+        initial='09:00',
+        widget=forms.TimeInput(attrs={'type': 'time', 'class': 'form-input'})
     )
     
     class Meta:
@@ -85,16 +89,13 @@ class TaskCreationForm(forms.ModelForm):
             instance.user = self.user
         if commit:
             instance.save()
-            
-            # Создаем или обновляем напоминание
             remind_before = self.cleaned_data.get('remind_before_days', 1)
-            repeat_interval = self.cleaned_data.get('repeat_reminder', 0)
-            
             TaskReminder.objects.update_or_create(
-                instance=instance,
+                task=instance,
                 defaults={
                     'remind_before_days': remind_before,
-                    'repeat_interval': repeat_interval,
+                    'repeat_interval': self.cleaned_data.get('repeat_reminder', 0),
+                    'reminder_time': self.cleaned_data.get('reminder_time'),
                     'is_active': remind_before > 0
                 }
             )

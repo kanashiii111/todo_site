@@ -8,11 +8,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY")
-TELEGRAM_BOT_TOKEN = '7707844406:AAFo5bXTLD_lq2ddh0Lce1w--690uPe_T2Q'
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 DEBUG=True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition

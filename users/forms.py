@@ -49,11 +49,6 @@ class RegisterForm(UserCreationForm):
         return user
     
 class ProfileForm(forms.ModelForm):
-    telegram_chat_id = forms.CharField(
-        label="Telegram Chat ID",
-        required=False,
-        widget=forms.TextInput(attrs={"placeholder": "Введите ваш Chat ID"}))
-    
     class Meta:
         model = Profile
-        fields = ['avatar', 'status', 'telegram_notifications']
+        fields = ['avatar', 'status']
