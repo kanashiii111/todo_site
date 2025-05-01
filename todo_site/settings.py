@@ -14,6 +14,16 @@ DEBUG=True
 
 ALLOWED_HOSTS = ['*']
 
+CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
+CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
+CELERY_TIMEZONE = 'Europe/Moscow'
+CELERY_BEAT_SCHEDULE = {
+    'check-reminders': {
+        'task': 'userProfile.tasks.check_reminders',
+        'schedule': 60.0,  # Каждые 5 минут
+    },
+}
+
 
 # Application definition
 
@@ -126,7 +136,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'ru-RU'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Europe/Moscow'
 
 USE_I18N = True
 USE_L10N = True

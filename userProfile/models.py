@@ -2,6 +2,7 @@ import datetime
 from django.db import models
 from django.contrib.auth.models import User
 from datetime import timedelta
+from django.utils import timezone
 
 class Task(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tasks')
@@ -33,4 +34,4 @@ class TaskReminder(models.Model):
     def next_reminder_datetime(self):
         due_date = self.task.dateTime_due.date()
         reminder_date = due_date - timedelta(days=self.remind_before_days)
-        return datetime.combine(reminder_date, self.reminder_time)
+        return timezone.make_aware(datetime.datetime.combine(reminder_date, self.reminder_time))

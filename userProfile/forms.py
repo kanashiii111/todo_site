@@ -96,7 +96,7 @@ class TaskCreationForm(forms.ModelForm):
                     'remind_before_days': remind_before,
                     'repeat_interval': self.cleaned_data.get('repeat_reminder', 0),
                     'reminder_time': self.cleaned_data.get('reminder_time'),
-                    'is_active': remind_before > 0
+                    'is_active': remind_before >= 0
                 }
             )
             

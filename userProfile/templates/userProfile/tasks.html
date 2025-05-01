@@ -183,6 +183,12 @@
                             min="0" value="{{ form.repeat_reminder.value|default:'0' }}" class="form-input">
                         <small class="form-text">0 - не повторять</small>
                     </div>
+
+                    <div class="form-group">
+                        <label for="id_reminder_time">Время напоминания:</label>
+                        <input type="time" id="id_reminder_time" name="reminder_time" 
+                            value="{{ form.reminder_time.value|default:'09:00' }}" class="form-input">
+                    </div>
                 {% else %}
                     <div class="alert alert-info">
                         Для получения напоминаний поставьте галочку "Получать уведомления в Telegram" в настройках.
