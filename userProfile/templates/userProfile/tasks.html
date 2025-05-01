@@ -67,6 +67,13 @@
                         <p><strong>Срок:</strong> {{ task.dateTime_due|date:"d.m.Y H:i" }}</p>
                         <p><strong>Предмет:</strong> {{ task.subject }}</p>
                         <p><strong>Задача:</strong> {{ task.taskType }}</p>
+                        {% if profile.telegram_notifications != False %}
+                            <p><strong>Напомнить за (дней):</strong> {{ task.reminder.remind_before_days }}</p>
+                            <p><strong>Повторять напоминание каждые (дней):</strong> {{ task.reminder.repeat_interval }}</p>
+                            <p><strong>Время напоминания:</strong> {{ task.reminder.reminder_time }}</p>
+                        {% else %}
+                            <p>Для получения напоминаний поставьте галочку напротив "Получать уведомления в Telegram"</p>
+                        {% endif %}
                         <button onclick="openEditTaskModal({{ task.id }})" class="edit-btn">Редактировать</button>
                     </div>
                 </div>
@@ -118,6 +125,30 @@
                         <input type="datetime-local" id="edit-dateTime_due" name="dateTime_due">
                     </div>
                     
+                    {% if profile.telegram_notifications == True %}
+                        <div class="form-group">
+                            <label for="remind_before_days">Напомнить за (дней):</label>
+                            <input type="number" id="remind_before_days" name="remind_before_days" 
+                                min="0" class="form-input">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="repeat_reminder">Повторять напоминание каждые (дней):</label>
+                            <input type="number" id="repeat_reminder" name="repeat_reminder" 
+                                min="0" class="form-input">
+                            <small class="form-text">0 - не повторять</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="id_reminder_time">Время напоминания:</label>
+                            <input type="time" id="id_reminder_time" name="reminder_time" class="form-input">
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info">
+                            Для получения напоминаний поставьте галочку "Получать уведомления в Telegram" в настройках.
+                        </div>
+                    {% endif %}
+
                     <button type="submit" class="submit-btn">Сохранить</button>
                 </form>
             </div>
@@ -253,11 +284,22 @@
                     document.getElementById('edit-subject').value = data.subject;
                     document.getElementById('edit-taskType').value = data.taskType;
                     
-                    // Форматируем дату для datetime-local input
                     const dueDate = new Date(data.dateTime_due);
-                    const formattedDate = dueDate.toISOString().slice(0, 16);
+                    const timezoneOffset = dueDate.getTimezoneOffset() * 60000;
+                    const localDate = new Date(dueDate.getTime() - timezoneOffset);
+                    const formattedDate = localDate.toISOString().slice(0, 16);
                     document.getElementById('edit-dateTime_due').value = formattedDate;
                     
+                    // Заполняем дополнительные поля, если они есть
+                    if (data.remind_before_days !== undefined) {
+                        document.getElementById('remind_before_days').value = data.remind_before_days;
+                    }
+                    if (data.repeat_reminder !== undefined) {
+                        document.getElementById('repeat_reminder').value = data.repeat_reminder;
+                    }
+                    if (data.reminder_time !== undefined) {
+                        document.getElementById('id_reminder_time').value = data.reminder_time;
+                    }
                     // Обновляем action формы
                     document.getElementById('edit-task-form').action = `/task_edit/${taskId}/`;
                     

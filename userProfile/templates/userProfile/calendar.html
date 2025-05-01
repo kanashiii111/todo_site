@@ -55,6 +55,13 @@
                                 <p><strong>Срок выполнения:</strong> {{ task.dateTime_due }}</p>
                                 <p><strong>Предмет:</strong> {{ task.subject }}</p>
                                 <p><strong>Тип задачи:</strong> {{ task.taskType }}</p>
+                                {% if profile.telegram_notifications != False %}
+                                    <p><strong>Напомнить за (дней):</strong> {{ task.reminder.remind_before_days }}</p>
+                                    <p><strong>Повторять напоминание каждые (дней):</strong> {{ task.reminder.repeat_interval }}</p>
+                                    <p><strong>Время напоминания:</strong> {{ task.reminder.reminder_time }}</p>
+                                {% else %}
+                                    <p>Для получения напоминаний поставьте галочку напротив "Получать уведомления в Telegram"</p>
+                                {% endif %}
                                 <button onclick="openEditTaskModal({{ task.id }})" class="edit-btn">Редактировать</button>
                             </div>
                         </div>
@@ -103,6 +110,30 @@
                                         <label for="edit-dateTime_due">Срок выполнения:</label>
                                         <input type="datetime-local" id="edit-dateTime_due" name="dateTime_due">
                                     </div>
+
+                                    {% if profile.telegram_notifications == True %}
+                                        <div class="form-group">
+                                            <label for="remind_before_days">Напомнить за (дней):</label>
+                                            <input type="number" id="remind_before_days" name="remind_before_days" 
+                                                min="0" class="form-input">
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="repeat_reminder">Повторять напоминание каждые (дней):</label>
+                                            <input type="number" id="repeat_reminder" name="repeat_reminder" 
+                                                min="0" class="form-input">
+                                            <small class="form-text">0 - не повторять</small>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="id_reminder_time">Время напоминания:</label>
+                                            <input type="time" id="id_reminder_time" name="reminder_time" class="form-input">
+                                        </div>
+                                    {% else %}
+                                        <div class="alert alert-info">
+                                            Для получения напоминаний поставьте галочку "Получать уведомления в Telegram" в настройках.
+                                        </div>
+                                    {% endif %}
                                     
                                     <button type="submit" class="submit-btn">Сохранить</button>
                                 </form>
@@ -157,6 +188,32 @@
                     <label for="date_due">Срок выполнения:</label>
                     <input type="datetime-local" id="dateTime_due" name="dateTime_due">
                 </div>
+
+                {% if profile.telegram_notifications == True %}
+                    <div class="form-group">
+                        <label for="remind_before_days">Напомнить за (дней):</label>
+                        <input type="number" id="remind_before_days" name="remind_before_days" 
+                            min="0" value="{{ form.remind_before_days.value|default:'1' }}" class="form-input">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="repeat_reminder">Повторять напоминание каждые (дней):</label>
+                        <input type="number" id="repeat_reminder" name="repeat_reminder" 
+                            min="0" value="{{ form.repeat_reminder.value|default:'0' }}" class="form-input">
+                        <small class="form-text">0 - не повторять</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="id_reminder_time">Время напоминания:</label>
+                        <input type="time" id="id_reminder_time" name="reminder_time" 
+                            value="{{ form.reminder_time.value|default:'09:00' }}" class="form-input">
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">
+                        Для получения напоминаний поставьте галочку "Получать уведомления в Telegram" в настройках.
+                    </div>
+                {% endif %}
+
                 <button type="submit" class="submit-btn">Создать</button>
             </form>
         </div>

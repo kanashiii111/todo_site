@@ -129,41 +129,34 @@ def settingsView(request):
         if 'logout' in request.POST:
             logout(request)
             return HttpResponseRedirect(reverse('users:login'))
-        if 'setTelegramNotis' in request.POST:
+        elif 'setTelegramNotis' in request.POST:
             profile.telegram_notifications = not profile.telegram_notifications
             profile.save() 
             return redirect("userProfile:settings")
-        if 'save_chat_id' in request.POST:
+        elif 'save_chat_id' in request.POST:
             new_chat_id = request.POST.get("telegram_chat_id", '').strip()
             if new_chat_id:
                 profile.telegram_chat_id = new_chat_id
                 profile.save() 
                 return redirect("userProfile:settings")
-        if 'sendmsg' in request.POST:
-            if profile.telegram_notifications != False:
-                chat_id = profile.telegram_chat_id
-                response_text = "Тест отправки сообщения"
-                requests.post(
-                    f"https://api.telegram.org/bot{todo_site.settings.TELEGRAM_BOT_TOKEN}/sendMessage",
-                    json={
-                        "chat_id": chat_id,
-                        "text": response_text,
-                        "parse_mode": "Markdown"
-                    }
-                )
-            else:
-                chat_id = profile.telegram_chat_id
-                response_text = "Галочка не нажата"
-                requests.post(
-                    f"https://api.telegram.org/bot{todo_site.settings.TELEGRAM_BOT_TOKEN}/sendMessage",
-                    json={
-                        "chat_id": chat_id,
-                        "text": response_text,
-                        "parse_mode": "Markdown"
-                    }
-                )
-                
-    
+        elif 'edit_profile' in request.POST:
+            # Обработка редактирования профиля
+            new_username = request.POST.get('username', '').strip()
+            new_status = request.POST.get('status', '').strip()
+            
+            if new_username:
+                request.user.username = new_username
+                request.user.save()
+            
+            profile.status = new_status
+            
+            if 'avatar' in request.FILES:
+                profile.avatar = request.FILES['avatar']
+            
+            profile.save()
+            
+        return redirect("userProfile:settings")
+
     form = ProfileForm(instance=profile)
     return render(request, 'userProfile/settings.html', {'profile' : profile, 'form' : form})
     
@@ -270,12 +263,26 @@ def editTask(request, task_id):
 @login_required(login_url='users:login')
 def get_task_data(request, task_id):
     task = get_object_or_404(Task, id=task_id, user=request.user)
+    try:
+        reminder = task.reminder
+        reminder_data = {
+            'remind_before_days': reminder.remind_before_days,
+            'repeat_reminder': reminder.repeat_interval,
+            'reminder_time': reminder.reminder_time.strftime('%H:%M'),
+        }
+    except TaskReminder.DoesNotExist:
+        reminder_data = {
+            'remind_before_days': 1,
+            'repeat_reminder': 0,
+            'reminder_time': '09:00',
+        }
     return JsonResponse({
         'title': task.title,
         'description': task.description,
         'subject': task.subject,
         'taskType': task.taskType,
         'dateTime_due': task.dateTime_due.isoformat(),
+        **reminder_data
     })
 
 ## Календарь
@@ -297,6 +304,9 @@ class CalendarView(ListView):
             user=self.request.user,
         ).select_related('user').order_by('dateTime_due')
         
+        
+        profile = get_object_or_404(Profile, user=self.request.user)
+        
         context.update({
             'calendar': month_days,
             'prev_month': self.prev_month(selected_date),
@@ -308,6 +318,7 @@ class CalendarView(ListView):
             'SUBJECT_CHOICES': SUBJECT_CHOICES,
             'TASKTYPE_CHOICES': TASKTYPE_CHOICES,
             'form' : TaskCreationForm(user = self.request.user),
+            'profile' : profile,
         })
         return context
 
