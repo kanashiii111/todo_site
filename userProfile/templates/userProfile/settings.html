@@ -16,21 +16,13 @@
     <!-- Кнопка профиля -->
     <button class="profile-header" onclick="openModal()" style="border: none; background: none; width: 100%; text-align: left;">
         <div class="avatar-section">
-            {% if user.profile.avatar %}  
-                <img src="{{ user.profile.avatar.url }}" class="avatar-img" alt="Аватар">
-            {% else %}
-                <img src="https://static-00.iconduck.com/assets.00/profile-default-icon-1024x1023-4u5mrj2v.png" class="avatar-img" alt="Дефолтный Аватар">
-            {% endif %}
+            <img src="{{ profile.get_avatar_url }}" class="avatar-img" alt="Аватар">
         </div>
         
         <div class="profile-info">
             <div class="username">{{ user.username }}</div>
             <div class="status">
-                {% if user.profile.status %}
-                    {{ user.profile.status }}
-                {% else %}
-                    Статус
-                {% endif %}
+                {{ user.profile.get_status }}
             </div>
             
             <div class="xp-progress-container">
@@ -38,7 +30,7 @@
                     <div class="xp-progress-fill" style="width: {{ profile.xp_percentage }}%"></div>
                 </div>
                 <div class="xp-text">
-                    {{ profile.xp }}/100
+                    {{ profile.xp }}/ {{ profile.xp_for_next_status}}
                 </div>
             </div>
         </div>
@@ -51,12 +43,9 @@
             <h2 style="text-align: center; margin-bottom: 10px;">Редактировать профиль</h2>
             
             <!-- Превью аватара -->
-            {% if user.profile.avatar %}  
-                <img src="{{ user.profile.avatar.url }}" class="avatar-preview" id="avatarPreview" alt="Текущий аватар">
-            {% else %}
-                <img src="https://static-00.iconduck.com/assets.00/profile-default-icon-1024x1023-4u5mrj2v.png" class="avatar-preview" id="avatarPreview" alt="Текущий аватар">
-            {% endif %}
             
+            <img src="{{ profile.get_avatar_url }}" class="avatar-preview" id="avatarPreview" alt="Текущий аватар">
+
             <form method="post" enctype="multipart/form-data" class="modal-form">
                 {% csrf_token %}
                 <input type="hidden" name="edit_profile" value="1">

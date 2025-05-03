@@ -22,7 +22,7 @@ class TaskCreationForm(forms.ModelForm):
     remind_before_days = forms.IntegerField(
         label="Напомнить за (дней)",
         initial=1,
-        min_value=0,
+        min_value=1,
         required=False,
         widget=forms.NumberInput(attrs={'class': 'form-input'})
     )
@@ -37,6 +37,7 @@ class TaskCreationForm(forms.ModelForm):
     reminder_time = forms.TimeField(
         label="Время напоминания",
         initial='09:00',
+        required=False,
         widget=forms.TimeInput(attrs={'type': 'time', 'class': 'form-input'})
     )
     
@@ -89,15 +90,30 @@ class TaskCreationForm(forms.ModelForm):
             instance.user = self.user
         if commit:
             instance.save()
-            remind_before = self.cleaned_data.get('remind_before_days', 1)
-            TaskReminder.objects.update_or_create(
-                task=instance,
-                defaults={
-                    'remind_before_days': remind_before,
-                    'repeat_interval': self.cleaned_data.get('repeat_reminder', 0),
-                    'reminder_time': self.cleaned_data.get('reminder_time'),
-                    'is_active': remind_before >= 0
-                }
-            )
+        
+        from users.models import Profile
+        profile = Profile.objects.get(user=self.user)
+        
+        if profile.telegram_notifications:
+            remind_before = self.cleaned_data.get('remind_before_days')
+            repeat_interval = self.cleaned_data.get('repeat_reminder', 0)
+            reminder_time = self.cleaned_data.get('reminder_time')
             
+            if remind_before is not None and remind_before > 0:
+                TaskReminder.objects.update_or_create(
+                    task=instance,
+                    defaults={
+                        'remind_before_days': remind_before,
+                        'repeat_interval': repeat_interval,
+                        'reminder_time': reminder_time,
+                        'is_active': True
+                    }
+                )
+            elif hasattr(instance, 'reminder'):
+                # Удаляем напоминание, если оно было отключено
+                instance.reminder.delete()
+        else:
+            # Удаляем существующее напоминание, если уведомления отключены
+            if hasattr(instance, 'reminder'):
+                instance.reminder.delete()
         return instance

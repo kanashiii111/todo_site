@@ -8,7 +8,10 @@ class LoginUserForm(forms.Form):
     password = forms.CharField(label='Пароль', widget=forms.PasswordInput(attrs={'class': 'form-input'}))
     
 class RegisterForm(UserCreationForm):
-    avatar = forms.ImageField(required=False, label='Аватар')
+    email = forms.EmailField(
+        required=True,
+        label='Почта',
+    )
     username = forms.CharField(label='Логин', help_text='Обязательное поле. Не более 150 символов. Только буквы, цифры и @/./+/-/_.')
     password1 = forms.CharField(
         label='Пароль',
@@ -32,7 +35,7 @@ class RegisterForm(UserCreationForm):
 
     class Meta:
         model = User
-        fields = ['username', 'password1', 'password2', 'avatar']
+        fields = ['username', 'email', 'password1', 'password2']
 
     def save(self, commit=True):
         user = super().save(commit=True)

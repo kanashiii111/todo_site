@@ -235,11 +235,7 @@
         <a href="{% url 'userProfile:settings' %}" class="user-profile-link">
             <div class="user-profile-bar">
                 {% if user.is_authenticated %}
-                    {% if user.profile.avatar %}
-                        <img src="{{ user.profile.avatar.url }}" alt='Аватар' class='user-avatar'>
-                    {% else %} 
-                        <img src='https://static-00.iconduck.com/assets.00/profile-default-icon-1024x1023-4u5mrj2v.png' alt="Аватар" class="user-avatar">
-                    {% endif %}
+                    <img src="{{ profile.get_avatar_url }}" class="avatar-img" alt="Аватар">
                     <div class="user-info">
                         <div class="username">{{ user.username }}</div>
                         <div class="user-status">
@@ -291,14 +287,19 @@
                     document.getElementById('edit-dateTime_due').value = formattedDate;
                     
                     // Заполняем дополнительные поля, если они есть
-                    if (data.remind_before_days !== undefined) {
-                        document.getElementById('remind_before_days').value = data.remind_before_days;
+                    
+                    const remindBeforeDays = document.getElementById('remind_before_days');
+                    const repeatReminder = document.getElementById('repeat_reminder');
+                    const reminderTime = document.getElementById('id_reminder_time');
+                    
+                    if (remindBeforeDays && data.remind_before_days !== null) {
+                        remindBeforeDays.value = data.remind_before_days;
                     }
-                    if (data.repeat_reminder !== undefined) {
-                        document.getElementById('repeat_reminder').value = data.repeat_reminder;
+                    if (repeatReminder && data.repeat_reminder !== null) {
+                        repeatReminder.value = data.repeat_reminder;
                     }
-                    if (data.reminder_time !== undefined) {
-                        document.getElementById('id_reminder_time').value = data.reminder_time;
+                    if (reminderTime && data.reminder_time !== null) {
+                        reminderTime.value = data.reminder_time;
                     }
                     // Обновляем action формы
                     document.getElementById('edit-task-form').action = `/task_edit/${taskId}/`;

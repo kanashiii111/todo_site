@@ -20,7 +20,7 @@ CELERY_TIMEZONE = 'Europe/Moscow'
 CELERY_BEAT_SCHEDULE = {
     'check-reminders': {
         'task': 'userProfile.tasks.check_reminders',
-        'schedule': 60.0,  # Каждые 5 минут
+        'schedule': 60.0, 
     },
 }
 

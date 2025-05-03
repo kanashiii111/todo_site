@@ -32,7 +32,6 @@ def profileRedirect(request):
 
 @csrf_exempt
 def telegram_webhook(request):
-    if request.user.profile.telegram_notifications == False: return
     if request.method == "POST":
         data = json.loads(request.body)
         message = data.get("message", {})
@@ -177,8 +176,11 @@ def tasksView(request):
         elif 'completeTask' in request.POST:
             task_id = request.POST.get('completeTask')
             task = get_object_or_404(Task, id=task_id, user=request.user)
-            task.isCompleted = not task.isCompleted
-            task.save()
+            if not task.isCompleted:
+                task.complete_task()
+            else:
+                task.isCompleted = False
+                task.save()
         return redirect('userProfile:tasks')
     
     search_query = request.GET.get('search', '')

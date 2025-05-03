@@ -4,11 +4,19 @@ from django.contrib.auth.models import User
 from datetime import timedelta
 from django.utils import timezone
 
+TASKTYPE_REWARD= {
+    "Лабораторная работа" : "50",
+    "Практическая работа" : "20", 
+    "Домашняя работа" : "10", 
+    "Экзамен" : "100",
+}
+
 class Task(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tasks')
     title = models.CharField(max_length=50)
     description = models.CharField(max_length=50)
     isCompleted = models.BooleanField(default=False)
+    wasCompletedBefore = models.BooleanField(default=False)
     subject = models.CharField(max_length=50)
     taskType = models.CharField(max_length=50)
     dateTime_due = models.DateTimeField(default=datetime.date.today)
@@ -16,6 +24,32 @@ class Task(models.Model):
     
     def __str__(self):
         return self.title
+    
+    def save(self, *args, **kwargs):
+        if not self.xp:
+            self.xp = self.calc_xp_reward()
+        super().save(*args, **kwargs)
+    
+    def calc_xp_reward(self):
+        return int(TASKTYPE_REWARD.get(self.taskType, 0))
+    
+    def complete_task(self):
+        if not self.isCompleted:
+            self.isCompleted = True
+            if not self.wasCompletedBefore:
+                from users.models import Profile
+                profile = Profile.objects.get(user=self.user)
+                profile.xp += self.xp
+                profile.save()
+                self.wasCompletedBefore = True
+                profile.check_level_up()
+                
+                if profile.telegram_notifications and hasattr(self, 'reminder'):
+                    self.reminder.delete()
+            
+            self.save()
+            return True
+        return False
 
 class TaskReminder(models.Model):
     task = models.OneToOneField(Task, on_delete=models.CASCADE, related_name='reminder')
