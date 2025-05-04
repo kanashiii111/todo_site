@@ -14,13 +14,10 @@
 
     <!-- Форма поиска -->
     <div class="search-container">
-        <form method="get" action="{% url 'userProfile:tasks' %}">
+        <form method="get" action="{% url 'userProfile:tasks' %}" id='search-form'>
             <input type="text" name="search" placeholder="Поиск по названию или описанию..." 
-                   value="{{ search_query }}" class="search-input">
-            <button type="submit" class="search-btn">Найти</button>
-            {% if search_query %}
-                <a href="{% url 'userProfile:tasks' %}" class="clear-search">Сбросить</a>
-            {% endif %}
+                   value="{{ search_query }}" class="search-input" id='search-input'>
+                   <a href="{% url 'userProfile:tasks' %}" class="clear-search">Сбросить</a>
         </form>
     </div>
     
@@ -29,7 +26,7 @@
                 <h2 class="day-header">{{ day.name }}</h2>
                 {% if day.tasks %}
                     {% for task in day.tasks %}
-                        <div class="task-item">
+                        <div class="task-item" data-task-title="{{ task.title|lower }}" data-task-desc="{{ task.description|lower }}">
                             <form method="post" action="{% url 'userProfile:tasks' %}" class="complete-form">
                                 {% csrf_token %}
                                 <input type="hidden" name="completeTask" value="{{ task.id }}">
@@ -49,9 +46,10 @@
                             </form>
                         </div>
                     {% endfor %}
-                {% else %}
-                    <p class="no-tasks">Нет задач</p>
                 {% endif %}
+                <div class="no-tasks" style="display: {% if not day.tasks %}block{% else %}none{% endif %}">
+                    Нет задач
+                </div>
             </div>
         {% endfor %}
         
@@ -239,7 +237,7 @@
                     <div class="user-info">
                         <div class="username">{{ user.username }}</div>
                         <div class="user-status">
-                            {% if user.profile.status %} {{ user.profile.status }} {% else %}Статус{% endif %}
+                            {{ user.profile.get_status }}
                         </div>
                     </div>
                 {% endif %}
@@ -254,6 +252,54 @@
     </div>
 
     <script>
+        // Функция для фильтрации задач при поиске
+        function filterTasks() {
+            const searchInput = document.getElementById('search-input');
+            if (!searchInput) return; // Проверяем существование элемента
+            
+            const searchTerm = searchInput.value.toLowerCase();
+            const taskItems = document.querySelectorAll('.task-item');
+            
+            taskItems.forEach(task => {
+                const title = task.dataset.taskTitle || '';
+                const desc = task.dataset.taskDesc || '';
+                
+                if (title.includes(searchTerm) || desc.includes(searchTerm)) {
+                    task.style.display = '';
+                } else {
+                    task.style.display = 'none';
+                }
+            });
+
+            document.querySelectorAll('.day-container').forEach(day => {
+                const tasks = day.querySelectorAll('.task-item');
+                const noTasksMessage = day.querySelector('.no-tasks');
+                const hasVisibleTasks = Array.from(tasks).some(task => 
+                    task.style.display !== 'none'
+                );
+                
+                // Показываем сообщение "Нет задач", если нет видимых задач
+                if (noTasksMessage) {
+                    noTasksMessage.style.display = hasVisibleTasks ? 'none' : 'block';
+                }
+            });
+        }
+        
+        // Обработчик события для динамического поиска
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('search-input');
+            if (searchInput) {
+                searchInput.addEventListener('input', filterTasks);
+                
+                // Применяем фильтр при загрузке, если есть поисковый запрос
+                const searchQuery = "{{ search_query|lower }}";
+                if (searchQuery) {
+                    searchInput.value = "{{ search_query }}";
+                    filterTasks();
+                }
+            }
+        });
+
         // Функция для открытия модального окна просмотра задачи
         function openTaskModal(taskId) {
             document.getElementById('modal-' + taskId).style.display = 'block';

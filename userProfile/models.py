@@ -66,6 +66,12 @@ class TaskReminder(models.Model):
         return f"Напоминание для {self.task.title}"
     
     def next_reminder_datetime(self):
-        due_date = self.task.dateTime_due.date()
+        due_date = self.task.dateTime_due
         reminder_date = due_date - timedelta(days=self.remind_before_days)
-        return timezone.make_aware(datetime.datetime.combine(reminder_date, self.reminder_time))
+        reminder_datetime = datetime.datetime.combine(
+            reminder_date.date(), 
+            self.reminder_time
+        )
+        if timezone.is_aware(due_date):
+            return timezone.make_aware(reminder_datetime, timezone.get_current_timezone())
+        return reminder_datetime

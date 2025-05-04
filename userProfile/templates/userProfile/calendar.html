@@ -38,7 +38,7 @@
                         {{ day.day }}
                     </div>
                     {% for task in tasks %}
-                        {% if task.dateTime_due.date == day %}
+                        {% if task.local_date == day %}
                         <div class="task {% if day.month != current_month.month %}task-other-month{% endif %}" onclick="openTaskModal('modal-{{ task.id }}')"> 
                             {{ task.title }}
                         </div>
@@ -219,6 +219,16 @@
         </div>
     </div>
 
+    <div class="day-tasks-container" id="day-tasks-container" style="display: none;">
+        <div class="day-tasks-header">
+            <span id="selected-day-title">Задачи на <span id="selected-date"></span></span>
+            <button onclick="closeDayTasks()" class="close-btn">×</button>
+        </div>
+        <ul class="day-tasks-list" id="day-tasks-list">
+            
+        </ul>
+    </div>
+
     <nav class="navigation">
 
         <a href="{% url 'userProfile:settings' %}" class="user-profile-link">
@@ -228,7 +238,7 @@
                     <div class="user-info">
                         <div class="username">{{ user.username }}</div>
                         <div class="user-status">
-                            {% if user.profile.status %} {{ user.profile.status }} {% else %}Статус{% endif %}
+                            {{ user.profile.get_status }}
                         </div>
                     </div>
                 {% endif %}
@@ -287,6 +297,151 @@
                     document.getElementById('edit-task-modal').style.display = 'block';
                 });
         }
+        let selectedDate = null;
+        
+        // Функция для обработки клика по дню в календаре
+        function handleDayClick(dayElement, date) {
+            // Удаляем выделение с предыдущего выбранного дня
+            const prevSelected = document.querySelector('.selected-day');
+            if (prevSelected) {
+                prevSelected.classList.remove('selected-day');
+            }
+            
+            // Добавляем выделение новому выбранному дню
+            const dayNumber = dayElement.querySelector('.day-number');
+            dayNumber.classList.add('selected-day');
+            
+            // Сохраняем выбранную дату
+            selectedDate = date;
+            
+            // Форматируем дату для отображения
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            const formattedDate = date.toLocaleDateString('ru-RU', options);
+            document.getElementById('selected-date').textContent = formattedDate;
+            
+            // Получаем задачи для выбранного дня
+            fetchDayTasks(date);
+            
+            // Показываем контейнер с задачами
+            document.getElementById('day-tasks-container').style.display = 'block';
+        }
+        
+        // Функция для получения задач на выбранный день
+        function fetchDayTasks(date) {
+    // Форматируем дату для запроса
+    const formattedDate = date.getFullYear() + '-' + 
+                         String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+                         String(date.getDate()).padStart(2, '0');
+    
+    fetch(`/get-day-tasks/?date=${formattedDate}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const tasksList = document.getElementById('day-tasks-list');
+            tasksList.innerHTML = ''; // Очищаем список
+            
+            if (!data.tasks || data.tasks.length === 0) {
+                // Добавляем сообщение, если задач нет
+                const noTasksItem = document.createElement('li');
+                noTasksItem.textContent = 'Нет задач на этот день';
+                noTasksItem.className = 'no-tasks-message';
+                tasksList.appendChild(noTasksItem);
+                return;
+            }
+            
+            // Добавляем задачи, если они есть
+            data.tasks.forEach(task => {
+                const taskItem = document.createElement('li');
+                taskItem.className = 'day-task-item';
+                
+                // Форматируем время задачи
+                const taskDate = new Date(task.dateTime_due);
+                const timeString = taskDate.toLocaleTimeString('ru-RU', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                taskItem.innerHTML = `
+                    <div>
+                        <span class="day-task-title" onclick="openTaskModal('modal-${task.id}')">
+                            ${task.title}
+                        </span>
+                        <div class="day-task-time">${timeString}</div>
+                    </div>
+                    <button class="delete-btn" onclick="deleteTask(${task.id}, event)">×</button>
+                `;
+                
+                tasksList.appendChild(taskItem);
+            });
+        })
+        .catch(error => {
+            console.error('Error fetching tasks:', error);
+            const tasksList = document.getElementById('day-tasks-list');
+            tasksList.innerHTML = '<li class="error-message">Ошибка загрузки задач</li>';
+        });
+}
+        // Функция для закрытия блока с задачами дня
+        function closeDayTasks() {
+            document.getElementById('day-tasks-container').style.display = 'none';
+            const prevSelected = document.querySelector('.selected-day');
+            if (prevSelected) {
+                prevSelected.classList.remove('selected-day');
+            }
+            selectedDate = null;
+        }
+        
+        // Функция для удаления задачи
+        function deleteTask(taskId, event) {
+            event.stopPropagation();
+            if (confirm('Удалить эту задачу?')) {
+                fetch(`/deleteTask/${taskId}/`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({})
+                })
+                .then(response => {
+                    if (response.ok && selectedDate) {
+                        fetchDayTasks(selectedDate);
+                    }
+                });
+            }
+        }
+        
+        // Модифицируем код календаря, чтобы добавить обработчики кликов на дни
+        document.addEventListener('DOMContentLoaded', function() {
+            const dayCells = document.querySelectorAll('.calendar td');
+            
+            dayCells.forEach(cell => {
+                const dayNumber = cell.querySelector('.day-number');
+                if (dayNumber) {
+                    const day = parseInt(dayNumber.textContent);
+                    const month = {{ current_month.month }};
+                    const year = {{ current_month.year }};
+                    
+                    // Проверяем, относится ли день к текущему месяцу
+                    const isCurrentMonth = cell.classList.contains('current-month-day');
+                    
+                    // Создаем дату (учитываем, что дни из других месяцев могут быть показаны)
+                    const date = new Date(
+                        isCurrentMonth ? year : (day < 15 ? year + (month === 12 ? 1 : 0) : year - (month === 1 ? 1 : 0)),
+                        isCurrentMonth ? month - 1 : (day < 15 ? (month === 12 ? 0 : month) : (month === 1 ? 11 : month - 2)),
+                        day
+                    );
+                    
+                    // Добавляем обработчик клика
+                    cell.addEventListener('click', function() {
+                        handleDayClick(cell, date);
+                    });
+                }
+            });
+        });
     </script>
 </body>
 </html>

@@ -140,11 +140,13 @@ form button[name="editSettings"]:hover {
     display: flex;
     flex-direction: column;
     gap: 20px;background-color: #fefefe;
-    margin: 15% auto;
+    margin: 5% auto;
     padding: 20px;
     border-radius: 10px;
     width: 80%;
     max-width: 500px;
+    max-height: 80vh;
+    overflow-y: auto;
     box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     align-items: center;
 }
@@ -153,6 +155,7 @@ form button[name="editSettings"]:hover {
     display: flex;
     flex-direction: column;
     gap: 15px;
+    width: 100%;
 }
 
 .form-input {
@@ -199,4 +202,18 @@ form button[name="editSettings"]:hover {
     object-fit: cover;
     align-self: center;
     margin-bottom: 10px;
+}
+
+.email-change-form,
+.password-change-form {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+}
+
+.password-change-form ul {
+    margin: 5px 0;
+    padding-left: 20px;
+    font-size: 0.9em;
+    color: #666;
 }

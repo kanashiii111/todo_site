@@ -41,9 +41,7 @@
         <div class="modal-content">
             <span class="close-btn" onclick="closeModal()">&times;</span>
             <h2 style="text-align: center; margin-bottom: 10px;">Редактировать профиль</h2>
-            
-            <!-- Превью аватара -->
-            
+
             <img src="{{ profile.get_avatar_url }}" class="avatar-preview" id="avatarPreview" alt="Текущий аватар">
 
             <form method="post" enctype="multipart/form-data" class="modal-form">
@@ -53,6 +51,29 @@
                 <div class="form-group">
                     <label for="username">Никнейм</label>
                     <input type="text" id="username" name="username" value="{{ user.username }}" class="form-input" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Изменить email</label>
+                    <form method="post" class="email-change-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="change_email" value="1">
+                        {{ email_form.new_email }}
+                        {{ email_form.current_password }}
+                        <button type="submit" class="btn btn-secondary">Изменить email</button>
+                    </form>
+                </div>
+
+                <div class="form-group">
+                    <label>Изменить пароль</label>
+                    <form method="post" class="password-change-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="change_password" value="1">
+                        {{ password_form.old_password }}
+                        {{ password_form.new_password1 }}
+                        {{ password_form.new_password2 }}
+                        <button type="submit" class="btn btn-secondary">Изменить пароль</button>
+                    </form>
                 </div>
                 
                 <div class="form-group">

@@ -68,6 +68,13 @@ class TaskCreationForm(forms.ModelForm):
             'taskType' : 'Задача',
             'dateTime_due': 'Срок выполнения',
         }
+    
+    def clean_dateTime_due(self):
+        dateTime_due = self.cleaned_data.get('dateTime_due')
+        if dateTime_due:
+            if timezone.is_naive(dateTime_due):
+                dateTime_due = timezone.make_aware(dateTime_due, timezone.get_current_timezone())
+        return dateTime_due
 
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop('user', None)

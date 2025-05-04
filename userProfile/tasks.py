@@ -17,7 +17,7 @@ def send_reminder(self, reminder_id):
         message = (
             f"⏰ Напоминание: {task.title}\n"
             f"📅 Срок выполнения: {local_due.strftime('%d.%m.%Y %H:%M')}\n"
-            f"⏱ Время уведомления: {reminder.reminder_time.strftime('%H:%M')}\n"
+            #f"⏱ Время уведомления: {timezone.now().time()}\n"
             f"📝 {task.description or '-'}\n"
         )
         
@@ -53,10 +53,22 @@ def check_reminders():
     now = timezone.localtime(timezone.now())
     logger.info(f"Начало проверки напоминаний в {now}")
     
-    for reminder in TaskReminder.objects.filter(is_active=True):
-        remind_time = reminder.next_reminder_datetime()
-        logger.info(f"Проверка задачи {reminder.task.id}: {remind_time} (сейчас {now})")
-        
-        if now >= remind_time:
-            logger.info(f"Напоминание для задачи {reminder.task.id} должно быть отправлено!")
-            send_reminder.delay(reminder.id)
+    for reminder in TaskReminder.objects.filter(is_active=True).select_related('task'):
+        try:
+            remind_time = reminder.next_reminder_datetime()
+            local_remind_time = timezone.localtime(remind_time)
+            local_now = timezone.localtime(now)
+            
+            logger.info(
+                f"Проверка задачи {reminder.task.id}:\n"
+                f"- Срок выполнения: {timezone.localtime(reminder.task.dateTime_due)}\n"
+                f"- Напоминание запланировано на: {local_remind_time}\n"
+                f"- Текущее время: {local_now}"
+            )
+            
+            if now >= remind_time:
+                logger.info(f"\nОтправка напоминания для задачи {reminder.task.id}!")
+                send_reminder.delay(reminder.id)
+                
+        except Exception as e:
+            logger.error(f"Ошибка обработки напоминания {reminder.id}: {str(e)}")

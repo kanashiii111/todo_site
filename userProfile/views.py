@@ -6,7 +6,7 @@ from django.http import JsonResponse
 from django.urls import reverse
 from .models import Task, TaskReminder
 from .forms import TaskCreationForm, SUBJECT_CHOICES, TASKTYPE_CHOICES
-from django.contrib.auth import logout
+from django.contrib.auth import logout, update_session_auth_hash
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from .serializers import TaskSerializer
@@ -14,15 +14,18 @@ from rest_framework import generics
 import calendar
 from django.utils.decorators import method_decorator
 from .filters import TaskFilter
-from datetime import datetime, timedelta, date, timezone
+from datetime import datetime, time, timedelta, date
+from django.utils import timezone
 from django.db.models import Q
 import requests
+from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
-from users.forms import ProfileForm
+from users.forms import CustomPasswordChangeForm, EmailChangeForm, ProfileForm
 from users.models import Profile
 import todo_site.settings
 from django.core.management.base import BaseCommand
-
+from django.contrib import messages
+from .tasks import send_reminder
 
 ## Настройки
 
@@ -30,10 +33,12 @@ from django.core.management.base import BaseCommand
 def profileRedirect(request):
     return redirect('userProfile:settings')
 
+@require_POST   
 @csrf_exempt
 def telegram_webhook(request):
     if request.method == "POST":
         data = json.loads(request.body)
+        #send_reminder.delay(data)
         message = data.get("message", {})
         
         if message.get("text") == "/start":
@@ -59,70 +64,11 @@ def telegram_webhook(request):
     
     return JsonResponse({"status": "error"}, status=400)
 
-def send_telegram_message(chat_id, text):
-    url = f"https://api.telegram.org/bot{todo_site.settings.TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        'chat_id': chat_id,
-        'text': text,
-        'parse_mode': 'HTML'
-    }
-    try:
-        response = requests.post(url, json=payload)
-        response.raise_for_status()  # Проверка на ошибки HTTP
-        return True
-    except requests.exceptions.RequestException as e:
-        print(f"Ошибка отправки в Telegram: {e}")
-        return False
-
-class Command(BaseCommand):
-    help = 'Send task reminders to users'
-
-    def handle(self, *args, **options):
-        now = timezone.now()
-        reminders = TaskReminder.objects.filter(
-            is_active=True,
-            task__isCompleted=False
-        ).select_related('task')
-
-        for reminder in reminders:
-            task = reminder.task
-            remind_date = task.dateTime_due - timezone.timedelta(days=reminder.remind_before_days)
-            
-            # Проверяем, нужно ли отправлять напоминание
-            if now >= remind_date and (
-                reminder.last_reminder_sent is None or 
-                reminder.last_reminder_sent < remind_date
-            ):
-                # Отправляем напоминание
-                message = f"⏰ Напоминание: {task.title}\n" \
-                     f"📅 Срок: {task.dateTime_due.strftime('%d.%m.%Y %H:%M')}\n" \
-                     f"📝 {task.description or '-'}"
-            
-                if reminder.task.user.profile.telegram_notifications and reminder.task.user.profile.telegram_chat_id:
-                    try:
-                        send_telegram_message(
-                            reminder.task.user.profile.telegram_chat_id,
-                            message
-                        )
-                    except Exception as e:
-                        self.stdout.write(f"Ошибка отправки в Telegram: {e}")
-                        
-                reminder.last_reminder_sent = now
-                reminder.save()
-
-                # Если это повторяющееся напоминание, обновляем дату
-                if reminder.repeat_interval > 0:
-                    new_remind_days = reminder.remind_before_days + reminder.repeat_interval
-                    if new_remind_days < (task.dateTime_due - now).days:
-                        reminder.remind_before_days = new_remind_days
-                        reminder.save()
-                    else:
-                        reminder.is_active = False
-                        reminder.save()
-
 @login_required(login_url='users:login')
 def settingsView(request):
     profile = get_object_or_404(Profile, user=request.user)
+    password_form = CustomPasswordChangeForm(request.user)
+    email_form = EmailChangeForm(request.user)
 
     if request.method == 'POST':
         if 'logout' in request.POST:
@@ -139,25 +85,49 @@ def settingsView(request):
                 profile.save() 
                 return redirect("userProfile:settings")
         elif 'edit_profile' in request.POST:
-            # Обработка редактирования профиля
             new_username = request.POST.get('username', '').strip()
             new_status = request.POST.get('status', '').strip()
-            
             if new_username:
                 request.user.username = new_username
                 request.user.save()
-            
             profile.status = new_status
-            
             if 'avatar' in request.FILES:
                 profile.avatar = request.FILES['avatar']
-            
             profile.save()
+        elif 'change_password' in request.POST:
+            password_form = CustomPasswordChangeForm(request.user, request.POST)
+            if password_form.is_valid():
+                user = password_form.save()
+                update_session_auth_hash(request, user)
+                messages.success(request, 'Пароль успешно изменен!')
+                return redirect("userProfile:settings")
+            else:
+                for error in password_form.errors.values():
+                    messages.error(request, error)
+                    
+        elif 'change_email' in request.POST:
+            email_form = EmailChangeForm(request.user, request.POST)
+            if email_form.is_valid():
+                new_email = email_form.cleaned_data['new_email']
+                request.user.email = new_email
+                request.user.save()
+                profile.email = new_email
+                profile.email_verified = False
+                profile.save()
+                # Здесь можно добавить отправку письма для подтверждения
+                messages.success(request, 'Email успешно изменен!')
+                return redirect("userProfile:settings")
             
         return redirect("userProfile:settings")
-
     form = ProfileForm(instance=profile)
-    return render(request, 'userProfile/settings.html', {'profile' : profile, 'form' : form})
+    context = {
+        'profile': profile,
+        'password_form': password_form,
+        'email_form': email_form,
+        'profile' : profile,
+        'form' : form,
+    }
+    return render(request, 'userProfile/settings.html', context)
     
 ## Задачи   
 
@@ -185,7 +155,6 @@ def tasksView(request):
     
     search_query = request.GET.get('search', '')
     
-    # Фильтруем задачи по пользователю и поисковому запросу
     tasks = Task.objects.filter(user=request.user)
     profile = request.user.profile
     
@@ -197,7 +166,8 @@ def tasksView(request):
     task_filter = TaskFilter(request.GET, queryset=Task.objects.filter(user=request.user))
     tasks = task_filter.qs.order_by('dateTime_due')
 
-    today = datetime.now().date()
+    now = timezone.now()
+    today = now.date()
     days = []
     
     for i in range(7):
@@ -208,11 +178,20 @@ def tasksView(request):
             day_name = "Завтра"
         else:
             day_name = current_date.strftime("%d.%m.%Y")
+            
+        start_of_day = datetime.combine(current_date, time.min, tzinfo=timezone.get_current_timezone())
+        end_of_day = datetime.combine(current_date, time.max, tzinfo=timezone.get_current_timezone())
+        
+        day_tasks = []
+        for task in tasks:
+            task_due_local = timezone.localtime(task.dateTime_due)
+            if start_of_day <= task_due_local <= end_of_day:
+                day_tasks.append(task)
         
         days.append({
             'date': current_date,
             'name': day_name,
-            'tasks': [task for task in tasks if task.dateTime_due.date() == current_date]
+            'tasks': [task for task in tasks if start_of_day <= task.dateTime_due <= end_of_day]
         })
     context = {
         'days': days,
@@ -225,6 +204,35 @@ def tasksView(request):
     }
 
     return render(request, 'userProfile/tasks.html', context)
+
+@login_required(login_url='users:login')
+def get_day_tasks(request):
+    date_str = request.GET.get('date')
+    try:
+        selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return JsonResponse({'error': 'Invalid date format'}, status=400)
+    
+    start_of_day = timezone.make_aware(datetime.combine(selected_date, time.min))
+    end_of_day = timezone.make_aware(datetime.combine(selected_date, time.max))
+    
+    tasks = Task.objects.filter(
+        user=request.user,
+        dateTime_due__gte=start_of_day,
+        dateTime_due__lte=end_of_day
+    ).order_by('dateTime_due')
+    
+    tasks_data = [
+        {
+            'id': task.id,
+            'title': task.title,
+            'dateTime_due': task.dateTime_due.isoformat(),
+        }
+        for task in tasks
+    ]
+    
+    return JsonResponse({'tasks': tasks_data})
+    
 
 @login_required(login_url='users:login')
 def deleteTask(request, task_id):
@@ -306,16 +314,29 @@ class CalendarView(ListView):
             user=self.request.user,
         ).select_related('user').order_by('dateTime_due')
         
+        tasks_list = []
+        for task in tasks:
+            local_due = timezone.localtime(task.dateTime_due)
+            tasks_list.append({
+                'id': task.id,
+                'title': task.title,
+                'description': task.description,
+                'subject': task.subject,
+                'taskType': task.taskType,
+                'dateTime_due': task.dateTime_due,
+                'local_date': local_due.date(),
+                'reminder': task.reminder if hasattr(task, 'reminder') else None
+            })
         
         profile = get_object_or_404(Profile, user=self.request.user)
-        
+        today = timezone.localtime(timezone.now()).date()
         context.update({
             'calendar': month_days,
             'prev_month': self.prev_month(selected_date),
             'next_month': self.next_month(selected_date),
             'current_month': selected_date,
-            'today': date.today(),
-            'tasks': tasks,
+            'today': today,
+            'tasks': tasks_list,
             'month_name': self.get_month_name(selected_date),
             'SUBJECT_CHOICES': SUBJECT_CHOICES,
             'TASKTYPE_CHOICES': TASKTYPE_CHOICES,
@@ -329,7 +350,7 @@ class CalendarView(ListView):
         if req_month:
             year, month = map(int, req_month.split('-'))
             return date(year, month, day=1)
-        return date.today()
+        return timezone.localtime(timezone.now()).date()
 
     def prev_month(self, d):
         """Генерирует URL параметр для предыдущего месяца"""
@@ -351,6 +372,3 @@ class CalendarView(ListView):
             'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
         ]
         return month_names[date_obj.month - 1]
-        
-
-
