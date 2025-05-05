@@ -1,16 +1,14 @@
+## Фронт
 import json
-from django.shortcuts import get_object_or_404
-from django.views.generic import ListView
-from django.shortcuts import render, HttpResponseRedirect, redirect
 from django.http import JsonResponse
-from django.urls import reverse
+from django.views import View
+from django.views.decorators.http import require_POST, require_http_methods
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+
+from django.shortcuts import get_object_or_404
 from .models import Task, TaskReminder
-from .forms import TaskCreationForm, SUBJECT_CHOICES, TASKTYPE_CHOICES
+from .forms import SUBJECT_CHOICES, TASKTYPE_CHOICES
 from django.contrib.auth import logout, update_session_auth_hash
-from django.contrib.auth.models import User
-from django.contrib.auth.decorators import login_required
-from .serializers import TaskSerializer
-from rest_framework import generics
 import calendar
 from django.utils.decorators import method_decorator
 from .filters import TaskFilter
@@ -20,25 +18,14 @@ from django.db.models import Q
 import requests
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
-from users.forms import CustomPasswordChangeForm, EmailChangeForm, ProfileForm
 from users.models import Profile
 import todo_site.settings
-from django.core.management.base import BaseCommand
-from django.contrib import messages
-from .tasks import send_reminder
-
-## Настройки
-
-@login_required(login_url='users:login')
-def profileRedirect(request):
-    return redirect('userProfile:settings')
 
 @require_POST   
 @csrf_exempt
 def telegram_webhook(request):
     if request.method == "POST":
         data = json.loads(request.body)
-        #send_reminder.delay(data)
         message = data.get("message", {})
         
         if message.get("text") == "/start":
@@ -64,148 +51,424 @@ def telegram_webhook(request):
     
     return JsonResponse({"status": "error"}, status=400)
 
-@login_required(login_url='users:login')
-def settingsView(request):
-    profile = get_object_or_404(Profile, user=request.user)
-    password_form = CustomPasswordChangeForm(request.user)
-    email_form = EmailChangeForm(request.user)
+# Настройки
 
-    if request.method == 'POST':
-        if 'logout' in request.POST:
-            logout(request)
-            return HttpResponseRedirect(reverse('users:login'))
-        elif 'setTelegramNotis' in request.POST:
-            profile.telegram_notifications = not profile.telegram_notifications
-            profile.save() 
-            return redirect("userProfile:settings")
-        elif 'save_chat_id' in request.POST:
-            new_chat_id = request.POST.get("telegram_chat_id", '').strip()
-            if new_chat_id:
-                profile.telegram_chat_id = new_chat_id
-                profile.save() 
-                return redirect("userProfile:settings")
-        elif 'edit_profile' in request.POST:
-            new_username = request.POST.get('username', '').strip()
-            new_status = request.POST.get('status', '').strip()
-            if new_username:
-                request.user.username = new_username
+@require_http_methods(["GET", "POST"])
+def api_settingsView(request):
+    profile = get_object_or_404(Profile, user=request.user)
+    
+    # Handle JSON requests
+    if request.content_type == 'application/json':
+        try:
+            data = json.loads(request.body) if request.body else {}
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        
+        # Process different actions
+        if request.method == 'POST':
+            action = data.get('action')
+            
+            if action == 'logout':
+                logout(request)
+                return JsonResponse({'success': True, 'message': 'Succesfully logged out'})
+            
+            elif action == 'setTelegramNotis':
+                profile.telegram_notifications = not profile.telegram_notifications
+                profile.save()
+                return JsonResponse({
+                    'success': True,
+                    'telegram_notifications': profile.telegram_notifications
+                })
+            
+            elif action == 'save_chat_id':
+                chat_id = data.get('telegram_chat_id', '').strip()
+                if chat_id:
+                    profile.telegram_chat_id = chat_id
+                    profile.save()
+                    return JsonResponse({
+                        'success': True,
+                        'telegram_chat_id': profile.telegram_chat_id
+                    })
+                return JsonResponse({'error': 'Invalid chat ID'}, status=400)
+            
+            elif action == 'edit_profile':
+                new_username = data.get('username', '').strip()
+                new_status = data.get('status', '').strip()
+                
+                if new_username:
+                    request.user.username = new_username
+                    request.user.save()
+                
+                profile.status = new_status
+                profile.save()
+                
+                return JsonResponse({
+                    'success': True,
+                    'username': request.user.username,
+                    'status': profile.status
+                })
+            
+            elif action == 'change_password':
+                old_password = data.get('old_password')
+                new_password1 = data.get('new_password1')
+                new_password2 = data.get('new_password2')
+                
+                if not all([old_password, new_password1, new_password2]):
+                    return JsonResponse({'error': 'All password fields are required'}, status=400)
+                
+                if not request.user.check_password(old_password):
+                    return JsonResponse({'error': 'Incorrect old password'}, status=400)
+                
+                if new_password1 != new_password2:
+                    return JsonResponse({'error': 'New passwords do not match'}, status=400)
+                
+                request.user.set_password(new_password1)
                 request.user.save()
-            profile.status = new_status
-            if 'avatar' in request.FILES:
-                profile.avatar = request.FILES['avatar']
-            profile.save()
-        elif 'change_password' in request.POST:
-            password_form = CustomPasswordChangeForm(request.user, request.POST)
-            if password_form.is_valid():
-                user = password_form.save()
-                update_session_auth_hash(request, user)
-                messages.success(request, 'Пароль успешно изменен!')
-                return redirect("userProfile:settings")
-            else:
-                for error in password_form.errors.values():
-                    messages.error(request, error)
-                    
-        elif 'change_email' in request.POST:
-            email_form = EmailChangeForm(request.user, request.POST)
-            if email_form.is_valid():
-                new_email = email_form.cleaned_data['new_email']
+                update_session_auth_hash(request, request.user)
+                
+                return JsonResponse({'success': True, 'message': 'Password changed'})
+            
+            elif action == 'change_email':
+                new_email = data.get('new_email', '').strip()
+                if not new_email:
+                    return JsonResponse({'error': 'Email is required'}, status=400)
+                
                 request.user.email = new_email
                 request.user.save()
                 profile.email = new_email
-                profile.email_verified = False
                 profile.save()
-                # Здесь можно добавить отправку письма для подтверждения
-                messages.success(request, 'Email успешно изменен!')
-                return redirect("userProfile:settings")
+                
+                return JsonResponse({
+                    'success': True,
+                    'email': request.user.email,
+                })
             
-        return redirect("userProfile:settings")
-    form = ProfileForm(instance=profile)
-    context = {
-        'profile': profile,
-        'password_form': password_form,
-        'email_form': email_form,
-        'profile' : profile,
-        'form' : form,
-    }
-    return render(request, 'userProfile/settings.html', context)
-    
+            return JsonResponse({'error': 'Invalid action'}, status=400)
+        
+        # GET request - return current settings
+        return JsonResponse({
+            'profile': {
+                'username': request.user.username,
+                'email': request.user.email,
+                'status': profile.status,
+                'avatar_url': profile.avatar.url if profile.avatar else None,
+                'telegram_notifications': profile.telegram_notifications,
+                'telegram_chat_id': profile.telegram_chat_id,
+            }
+        })
+ 
 ## Задачи   
-
-class TaskListCreateView(generics.ListCreateAPIView):
-    queryset = Task.objects.all()
-    serializer_class = TaskSerializer
     
-@login_required(login_url='users:login')
-def tasksView(request):
-    if request.method == 'POST':
-        if 'deleteTask' in request.POST:
-            task_id = request.POST.get('deleteTask')
-            task = get_object_or_404(Task, id=task_id, user=request.user)
-            task.delete()
-            return redirect('userProfile:tasks')
-        elif 'completeTask' in request.POST:
-            task_id = request.POST.get('completeTask')
-            task = get_object_or_404(Task, id=task_id, user=request.user)
-            if not task.isCompleted:
-                task.complete_task()
-            else:
-                task.isCompleted = False
-                task.save()
-        return redirect('userProfile:tasks')
-    
-    search_query = request.GET.get('search', '')
-    
-    tasks = Task.objects.filter(user=request.user)
+@require_http_methods(["GET", "POST", "DELETE", "PUT"])
+def api_tasksView(request):
     profile = request.user.profile
     
-    if search_query:
-        tasks = tasks.filter(
-            Q(title__icontains=search_query) | 
-            Q(description__icontains=search_query))
+    # JSON API Handling
+    if request.content_type == 'application/json':
+        try:
+            data = json.loads(request.body) if request.body else {}
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
-    task_filter = TaskFilter(request.GET, queryset=Task.objects.filter(user=request.user))
-    tasks = task_filter.qs.order_by('dateTime_due')
+        # POST/DELETE Actions
+        if request.method in ['POST', 'DELETE', 'PUT']:
+            action = data.get('action')
+            task_id = data.get('task_id')
 
-    now = timezone.now()
-    today = now.date()
-    days = []
+            if action == 'createTask':
+                try:
+                    title = data.get('title')
+                    description = data.get('description', '')
+                    subject = data.get('subject')
+                    task_type = data.get('taskType')
+                    date_time_due = data.get('dateTime_due')
+                    telegram_notifications = data.get('telegram_notifications', False)
+                    
+                    # Валидация обязательных полей
+                    if not all([title, subject, task_type, date_time_due]):
+                        return JsonResponse({'error': 'Missing required fields'}, status=400)
+                    
+                    # Проверка допустимых значений subject
+                    SUBJECT_CHOICES = {
+                        "Программирование": "Программирование",
+                        "Информатика": "Информатика",
+                        "Дискретная математика": "Дискретная математика",
+                    }
+                    if subject not in SUBJECT_CHOICES:
+                        return JsonResponse({
+                            'error': f'Invalid subject. Allowed values: {", ".join(SUBJECT_CHOICES.keys())}'
+                        }, status=400)
+                    
+                    # Проверка допустимых значений taskType
+                    TASKTYPE_CHOICES = {
+                        "Лабораторная работа": "Лабораторная работа",
+                        "Практическая работа": "Практическая работа", 
+                        "Домашняя работа": "Домашняя работа", 
+                        "Экзамен": "Экзамен",
+                    }
+                    if task_type not in TASKTYPE_CHOICES:
+                        return JsonResponse({
+                            'error': f'Invalid taskType. Allowed values: {", ".join(TASKTYPE_CHOICES.keys())}'
+                        }, status=400)
+                    
+                    try:
+                        due_date = datetime.datetime.strptime(date_time_due, '%d-%m-%YT%H:%M:%S')
+                        if timezone.is_aware(due_date):
+                            due_date = timezone.make_naive(due_date)
+                    except (ValueError, TypeError):
+                        return JsonResponse({'error': 'Invalid date format. Use DD-MM-YYYYTHH:MM:SS'}, status=400)
+                    
+                    # Создаем задачу
+                    task = Task.objects.create(
+                        user=request.user,
+                        title=title,
+                        description=description,
+                        subject=subject,
+                        taskType=task_type,
+                        dateTime_due=due_date
+                    )
+                    
+                    response_data = {
+                        'success': True,
+                        'message': 'Task created successfully',
+                        'task': {
+                            'id': task.id,
+                            'title': task.title,
+                            'description': task.description,
+                            'subject': task.subject,
+                            'taskType': task.taskType,
+                            'dateTime_due': task.dateTime_due.isoformat(),
+                            'isCompleted': task.isCompleted
+                        }
+                    }
+                    
+                    # Обработка напоминаний
+                    if telegram_notifications and profile.telegram_notifications:
+                        remind_before_days = data.get('remind_before_days', 1)
+                        repeat_interval = data.get('repeat_interval', 0)
+                        reminder_time = data.get('reminder_time', '09:00')
+                        
+                        try:
+                            reminder_time_obj = datetime.datetime.strptime(reminder_time, '%H:%M').time()
+                        except ValueError:
+                            reminder_time_obj = datetime.time(9, 0)
+                        
+                        # Создаем напоминание
+                        TaskReminder.objects.create(
+                            task=task,
+                            remind_before_days=remind_before_days,
+                            repeat_interval=repeat_interval,
+                            reminder_time=reminder_time_obj
+                        )
+                        
+                        response_data['task']['reminder'] = {
+                            'remind_before_days': remind_before_days,
+                            'repeat_interval': repeat_interval,
+                            'reminder_time': reminder_time
+                        }
+                        response_data['message'] = 'Task with reminder created successfully'
+                    
+                    return JsonResponse(response_data)
+                    
+                except Exception as e:
+                    return JsonResponse({'error': f'Task creation failed: {str(e)}'}, status=500)
+            elif action == 'delete_task':
+                task = get_object_or_404(Task, id=task_id, user=request.user)
+                task.delete()
+                return JsonResponse({'success': True, 'message': 'Task deleted'})
+            elif action == "edit_task":
+                task = get_object_or_404(Task, id=task_id, user=request.user)
     
-    for i in range(7):
-        current_date = today + timedelta(days=i)
-        if i == 0:
-            day_name = "Сегодня"
-        elif i == 1:
-            day_name = "Завтра"
-        else:
-            day_name = current_date.strftime("%d.%m.%Y")
+                try:
+                    # Получаем обновленные данные
+                    new_title = data.get('title', task.title)
+                    new_description = data.get('description', task.description)
+                    new_subject = data.get('subject', task.subject)
+                    new_task_type = data.get('taskType', task.taskType)
+                    new_date_time_due = data.get('dateTime_due', task.dateTime_due.isoformat())
+                    telegram_notifications = data.get('telegram_notifications', False)
+                    
+                    # Проверка допустимых значений subject
+                    SUBJECT_CHOICES = {
+                        "Программирование": "Программирование",
+                        "Информатика": "Информатика",
+                        "Дискретная математика": "Дискретная математика",
+                    }
+                    if new_subject not in SUBJECT_CHOICES:
+                        return JsonResponse({
+                            'error': f'Invalid subject. Allowed values: {", ".join(SUBJECT_CHOICES.keys())}'
+                        }, status=400)
+                    
+                    # Проверка допустимых значений taskType
+                    TASKTYPE_CHOICES = {
+                        "Лабораторная работа": "Лабораторная работа",
+                        "Практическая работа": "Практическая работа", 
+                        "Домашняя работа": "Домашняя работа", 
+                        "Экзамен": "Экзамен",
+                    }
+                    if new_task_type not in TASKTYPE_CHOICES:
+                        return JsonResponse({
+                            'error': f'Invalid taskType. Allowed values: {", ".join(TASKTYPE_CHOICES.keys())}'
+                        }, status=400)
+
+                    # Обновляем основные поля задачи
+                    task.title = new_title
+                    task.description = new_description
+                    task.subject = new_subject
+                    task.taskType = new_task_type
+                    
+                    # Обрабатываем дату
+                    try:
+                        if isinstance(new_date_time_due, str):
+                            due_date = datetime.datetime.strptime(new_date_time_due, '%d-%m-%YT%H:%M:%S')
+                            if timezone.is_aware(due_date):
+                                due_date = timezone.make_naive(due_date)
+                            task.dateTime_due = due_date
+                    except (ValueError, TypeError) as e:
+                        return JsonResponse({'error': f'Invalid date format: {str(e)}'}, status=400)
+                    
+                    # Сохраняем задачу
+                    task.save()
+                    
+                    response_data = {
+                        'success': True,
+                        'message': 'Task updated successfully',
+                        'task': {
+                            'id': task.id,
+                            'title': task.title,
+                            'description': task.description,
+                            'subject': task.subject,
+                            'taskType': task.taskType,
+                            'dateTime_due': task.dateTime_due.isoformat(),
+                            'isCompleted': task.isCompleted
+                        }
+                    }
+                    
+                    # Обработка напоминаний
+                    if hasattr(task, 'reminder'):
+                        current_reminder = task.reminder
+                        
+                        if telegram_notifications and profile.telegram_notifications:
+                            # Обновляем существующее напоминание
+                            remind_before_days = data.get('remind_before_days', current_reminder.remind_before_days)
+                            repeat_interval = data.get('repeat_interval', current_reminder.repeat_interval)
+                            reminder_time = data.get('reminder_time', current_reminder.reminder_time.strftime('%H:%M'))
+                            
+                            try:
+                                reminder_time_obj = datetime.datetime.strptime(reminder_time, '%H:%M').time()
+                            except ValueError:
+                                reminder_time_obj = datetime.time(9, 0)
+                            
+                            current_reminder.remind_before_days = remind_before_days
+                            current_reminder.repeat_interval = repeat_interval
+                            current_reminder.reminder_time = reminder_time_obj
+                            current_reminder.save()
+                            
+                            response_data['task']['reminder'] = {
+                                'remind_before_days': remind_before_days,
+                                'repeat_interval': repeat_interval,
+                                'reminder_time': reminder_time
+                            }
+                        else:
+                            # Удаляем напоминание, если уведомления отключены
+                            current_reminder.delete()
+                            response_data['message'] = 'Task updated (reminder removed)'
+                    elif telegram_notifications and profile.telegram_notifications:
+                        # Создаем новое напоминание
+                        remind_before_days = data.get('remind_before_days', 1)
+                        repeat_interval = data.get('repeat_interval', 0)
+                        reminder_time = data.get('reminder_time', '09:00')
+                        
+                        try:
+                            reminder_time_obj = datetime.datetime.strptime(reminder_time, '%H:%M').time()
+                        except ValueError:
+                            reminder_time_obj = datetime.time(9, 0)
+                        
+                        TaskReminder.objects.create(
+                            task=task,
+                            remind_before_days=remind_before_days,
+                            repeat_interval=repeat_interval,
+                            reminder_time=reminder_time_obj
+                        )
+                        
+                        response_data['task']['reminder'] = {
+                            'remind_before_days': remind_before_days,
+                            'repeat_interval': repeat_interval,
+                            'reminder_time': reminder_time
+                        }
+                        response_data['message'] = 'Task updated with new reminder'
+                    
+                    return JsonResponse(response_data)
+                    
+                except Exception as e:
+                    return JsonResponse({'error': f'Task update failed: {str(e)}'}, status=500)
+
+            elif action == 'toggle_completeTask':
+                task = get_object_or_404(Task, id=task_id, user=request.user)
+                if not task.isCompleted:
+                    task.complete_task()
+                else:
+                    task.isCompleted = False
+                    task.save()
+                return JsonResponse({
+                    'success': True,
+                    'isCompleted': task.isCompleted
+                })
+
+        # GET Request - Return tasks data
+        search_query = request.GET.get('search', '')
+        tasks = Task.objects.filter(user=request.user)
+
+        if search_query:
+            tasks = tasks.filter(
+                Q(title__icontains=search_query) | 
+                Q(description__icontains=search_query)
+            )
+
+        task_filter = TaskFilter(request.GET, queryset=Task.objects.filter(user=request.user))
+        tasks = task_filter.qs.order_by('dateTime_due')
+
+        now = timezone.now()
+        today = now.date()
+        days = []
+
+        for i in range(7):
+            current_date = today + timedelta(days=i)
+            day_name = "Сегодня" if i == 0 else "Завтра" if i == 1 else current_date.strftime("%d.%m.%Y")
             
-        start_of_day = datetime.combine(current_date, time.min, tzinfo=timezone.get_current_timezone())
-        end_of_day = datetime.combine(current_date, time.max, tzinfo=timezone.get_current_timezone())
-        
-        day_tasks = []
-        for task in tasks:
-            task_due_local = timezone.localtime(task.dateTime_due)
-            if start_of_day <= task_due_local <= end_of_day:
-                day_tasks.append(task)
-        
-        days.append({
-            'date': current_date,
-            'name': day_name,
-            'tasks': [task for task in tasks if start_of_day <= task.dateTime_due <= end_of_day]
+            start_of_day = datetime.combine(current_date, time.min, tzinfo=timezone.get_current_timezone())
+            end_of_day = datetime.combine(current_date, time.max, tzinfo=timezone.get_current_timezone())
+            
+            day_tasks = []
+            for task in tasks:
+                task_due_local = timezone.localtime(task.dateTime_due)
+                if start_of_day <= task_due_local <= end_of_day:
+                    day_tasks.append({
+                        'id': task.id,
+                        'title': task.title,
+                        'description': task.description,
+                        'isCompleted': task.isCompleted,
+                        'due_date': task.dateTime_due.isoformat(),
+                        'subject': task.subject,
+                        'task_type': task.taskType
+                    })
+            
+            days.append({
+                'date': current_date.strftime("%Y-%m-%d"),
+                'name': day_name,
+                'tasks': day_tasks
+            })
+
+        return JsonResponse({
+            'days': days,
+            'subject_choices': dict(SUBJECT_CHOICES),
+            'task_type_choices': dict(TASKTYPE_CHOICES),
+            'profile': {
+                'username': profile.user.username,
+                'avatar_url': profile.avatar.url if profile.avatar else None
+            }
         })
-    context = {
-        'days': days,
-        'SUBJECT_CHOICES': SUBJECT_CHOICES,
-        'TASKTYPE_CHOICES': TASKTYPE_CHOICES,
-        'form' : TaskCreationForm(user = request.user),
-        'filter' : task_filter,
-        'search_query' : search_query,
-        'profile' : profile,
-    }
 
-    return render(request, 'userProfile/tasks.html', context)
-
-@login_required(login_url='users:login')
 def get_day_tasks(request):
     date_str = request.GET.get('date')
     try:
@@ -233,44 +496,6 @@ def get_day_tasks(request):
     
     return JsonResponse({'tasks': tasks_data})
     
-
-@login_required(login_url='users:login')
-def deleteTask(request, task_id):
-    if request.method == 'POST':
-        task = get_object_or_404(Task, id=task_id, user=request.user)
-        task.delete()
-    return redirect(request.POST.get('next', 'userProfile:tasks'))
-
-@login_required(login_url='users:login')
-def createTask(request):
-    if request.method == 'POST':
-        form = TaskCreationForm(request.POST, user=request.user)
-        if form.is_valid():
-            form.save()
-            return redirect('userProfile:tasks')
-    else:
-        form = TaskCreationForm(user=request.user)
-    return render(request, 'userProfile/create_task.html', {'form': form})
-
-@login_required(login_url='users:login')
-def editTask(request, task_id):
-    task = get_object_or_404(Task, id=task_id, user=request.user)
-
-    if request.method == 'POST':
-        form = TaskCreationForm(request.POST, instance=task, user=request.user)
-        if form.is_valid():
-            form.save()
-            return redirect('userProfile:tasks')
-    else:
-        # Заполняем форму данными задачи
-        form = TaskCreationForm(instance=task, user=request.user)
-    
-    return render(request, 'userProfile/task_edit.html', {
-        'form': form,
-        'task': task
-    })
-
-@login_required(login_url='users:login')
 def get_task_data(request, task_id):
     task = get_object_or_404(Task, id=task_id, user=request.user)
     try:
@@ -297,76 +522,117 @@ def get_task_data(request, task_id):
 
 ## Календарь
 
-@method_decorator(login_required(login_url='users:login'), name='dispatch')
-class CalendarView(ListView):
-    model = Task
-    template_name = 'userProfile/calendar.html'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        
-        selected_date = self.get_date(self.request.GET.get('month', None))
-        
-        cal = calendar.Calendar()
-        month_days = cal.monthdatescalendar(selected_date.year, selected_date.month)
-        
-        tasks = Task.objects.filter(
-            user=self.request.user,
-        ).select_related('user').order_by('dateTime_due')
-        
-        tasks_list = []
-        for task in tasks:
-            local_due = timezone.localtime(task.dateTime_due)
-            tasks_list.append({
-                'id': task.id,
-                'title': task.title,
-                'description': task.description,
-                'subject': task.subject,
-                'taskType': task.taskType,
-                'dateTime_due': task.dateTime_due,
-                'local_date': local_due.date(),
-                'reminder': task.reminder if hasattr(task, 'reminder') else None
+@method_decorator(require_http_methods(["GET"]), name='dispatch')
+class api_calendarView(View):
+    def get(self, request, *args, **kwargs):
+        # JSON API Handling
+        if request.content_type == 'application/json':
+            return self.handle_json_request(request)
+    
+    def handle_json_request(self, request):
+        try:
+            selected_date = self.get_date(request.GET.get('month'))
+            
+            # Get tasks for the user
+            tasks = Task.objects.filter(
+                user=request.user
+            ).select_related('user').order_by('dateTime_due')
+            
+            # Prepare calendar data
+            cal = calendar.Calendar()
+            month_days = cal.monthdatescalendar(selected_date.year, selected_date.month)
+            
+            # Format tasks data
+            tasks_list = []
+            for task in tasks:
+                local_due = timezone.localtime(task.dateTime_due)
+                task_data = {
+                    'id': task.id,
+                    'title': task.title,
+                    'description': task.description,
+                    'subject': task.subject,
+                    'taskType': task.taskType,
+                    'dateTime_due': task.dateTime_due.isoformat(),
+                    'local_date': local_due.strftime('%Y-%m-%d'),
+                    'isCompleted': task.isCompleted,
+                    'xp': task.xp
+                }
+                if hasattr(task, 'reminder'):
+                    task_data['reminder'] = {
+                        'remind_before_days': task.reminder.remind_before_days,
+                        'repeat_interval': task.reminder.repeat_interval,
+                        'reminder_time': task.reminder.reminder_time.strftime('%H:%M')
+                    }
+                tasks_list.append(task_data)
+            
+            # Prepare calendar structure
+            calendar_data = []
+            for week in month_days:
+                week_data = []
+                for day in week:
+                    day_tasks = [t for t in tasks_list if t['local_date'] == day.strftime('%Y-%m-%d')]
+                    week_data.append({
+                        'date': day.strftime('%Y-%m-%d'),
+                        'day_name': day.strftime('%A'),
+                        'day_number': day.day,
+                        'is_current_month': day.month == selected_date.month,
+                        'tasks': day_tasks
+                    })
+                calendar_data.append(week_data)
+            
+            profile = request.user.profile
+            today = timezone.localtime(timezone.now()).date()
+            
+            return JsonResponse({
+                'success': True,
+                'calendar': calendar_data,
+                'navigation': {
+                    'prev_month': self.prev_month(selected_date),
+                    'next_month': self.next_month(selected_date),
+                    'current_month': f'{selected_date.year}-{selected_date.month}'
+                },
+                'current_date': {
+                    'month_name': self.get_month_name(selected_date),
+                    'year': selected_date.year
+                },
+                'today': today.strftime('%Y-%m-%d'),
+                'user_profile': {
+                    'username': profile.user.username,
+                    'avatar_url': profile.avatar.url if profile.avatar else None,
+                    'xp': profile.xp,
+                    'level': profile.level
+                },
+                'choices': {
+                    'subjects': dict(SUBJECT_CHOICES),
+                    'task_types': dict(TASKTYPE_CHOICES)
+                }
             })
-        
-        profile = get_object_or_404(Profile, user=self.request.user)
-        today = timezone.localtime(timezone.now()).date()
-        context.update({
-            'calendar': month_days,
-            'prev_month': self.prev_month(selected_date),
-            'next_month': self.next_month(selected_date),
-            'current_month': selected_date,
-            'today': today,
-            'tasks': tasks_list,
-            'month_name': self.get_month_name(selected_date),
-            'SUBJECT_CHOICES': SUBJECT_CHOICES,
-            'TASKTYPE_CHOICES': TASKTYPE_CHOICES,
-            'form' : TaskCreationForm(user = self.request.user),
-            'profile' : profile,
-        })
-        return context
-
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+    
     def get_date(self, req_month):
-        """Парсит дату из параметра запроса или возвращает текущую дату"""
+        """Parse date from request parameter or return current date"""
         if req_month:
             year, month = map(int, req_month.split('-'))
             return date(year, month, day=1)
         return timezone.localtime(timezone.now()).date()
-
+    
     def prev_month(self, d):
-        """Генерирует URL параметр для предыдущего месяца"""
+        """Generate URL parameter for previous month"""
         first = d.replace(day=1)
         prev_month = first - timedelta(days=1)
-        return f'month={prev_month.year}-{prev_month.month}'
-
+        return f'{prev_month.year}-{prev_month.month}'
+    
     def next_month(self, d):
-        """Генерирует URL параметр для следующего месяца"""
+        """Generate URL parameter for next month"""
         days_in_month = calendar.monthrange(d.year, d.month)[1]
         last = d.replace(day=days_in_month)
         next_month = last + timedelta(days=1)
-        return f'month={next_month.year}-{next_month.month}'
-
+        return f'{next_month.year}-{next_month.month}'
+    
     def get_month_name(self, date_obj):
-        """Возвращает локализованное название месяца"""
+        """Return localized month name"""
         month_names = [
             'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
             'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'

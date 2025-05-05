@@ -1,54 +1,13 @@
 import json
 
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.http import JsonResponse
-from django.shortcuts import HttpResponseRedirect, redirect, render
-from django.urls import reverse
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
-
-from .forms import LoginUserForm, RegisterForm
-
-
-def home_redirect(request):
-    return redirect('users:login')
-
-
-def loginUser(request):
-    if request.method == 'POST':
-        if 'login' in request.POST:
-            form = LoginUserForm(request.POST)
-            if form.is_valid():
-                cd = form.cleaned_data
-                user = authenticate(
-                    request, username=cd['username'], password=cd['password'])
-                if user and user.is_active:
-                    login(request, user)
-                    return HttpResponseRedirect(reverse('userProfile:tasks'))
-        elif 'signUp' in request.POST:
-            return redirect('users:register')
-    else:
-        form = LoginUserForm()
-
-    return render(request, 'users/login.html', {'form': form})
-
-
-def registerUser(request):
-    if request.method == 'POST':
-        form = RegisterForm(request.POST, request.FILES)
-        if form.is_valid():
-            form.save()
-            return redirect('users:login')
-    else:
-        form = RegisterForm()
-
-    return render(request, 'users/register.html', {'form': form})
-
 
 @ensure_csrf_cookie
 def login_view_placeholder(request):
     return JsonResponse({"detail": "CSRF cookie set"})
-
 
 @require_POST
 def api_login(request):
@@ -77,12 +36,56 @@ def api_login(request):
     else:
         return JsonResponse({'error': 'Invalid credentials'}, status=401)
 
-
 @require_POST
-def api_logout(request):
-    logout(request)
-    return JsonResponse({'success': True, 'message': 'Logged out successfully'})
+def api_register(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
+    username = data.get('username')
+    password = data.get('password')
+    email = data.get('email', '')
+    
+    if not username or not password:
+        return JsonResponse(
+            {'error': 'Username and password are required'}, 
+            status=400
+        )
+
+    User = get_user_model()
+    
+    if User.objects.filter(username=username).exists():
+        return JsonResponse(
+            {'error': 'Username already exists'},
+            status=400
+        )
+
+    try:
+        user = User.objects.create_user(
+            username=username,
+            password=password,
+            email=email
+        )
+
+        user.save()
+        
+        return JsonResponse({
+            'success': True,
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email
+            }
+        })
+    
+    except Exception as e:
+        return JsonResponse(
+            {'error': f'User creation failed: {str(e)}'},
+            status=500
+        )
+
+# logout перенес в userProfile/views.py
 
 @require_GET
 def check_auth_status(request):
