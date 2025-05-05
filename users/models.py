@@ -8,7 +8,7 @@ import hashlib
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     email = models.EmailField(unique=True, default='')
-    status = models.CharField(default='#Завтра точно начну', blank=True, null=True)
+    status = models.CharField(max_length=50, default='#Завтра точно начну', blank=True, null=True)
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
     tasks = models.ManyToManyField(Task)
     telegram_chat_id = models.CharField(max_length=50, blank=True, null=True)
