@@ -4,6 +4,8 @@ __pycache__/
 *.py[cod]
 /venv/
 .env.sample
+.venv
+
 
 # Celery
 celerybeat-schedule
