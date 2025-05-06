@@ -45,11 +45,11 @@ def api_register(request):
 
     username = data.get('username')
     password = data.get('password')
-    email = data.get('email', '')
+    email = data.get('email')
     
     if not username or not password:
         return JsonResponse(
-            {'error': 'Username and password are required'}, 
+            {'error': 'Username, password and email are required'}, 
             status=400
         )
 

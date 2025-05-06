@@ -6,9 +6,6 @@ from . import views
 app_name = 'users'
 
 urlpatterns = [
-    #path('', views.home_redirect, name='home_redirect'),
-    #path('login/', views.loginUser, name='login'),
-    #path('register/', views.registerUser, name='register'),
     path('api/login/', views.api_login, name='api_login'),
     path('api/register/', views.api_register, name='api_register'),
     path('api/get-csrf/', views.login_view_placeholder, name='api_get_csrf'),

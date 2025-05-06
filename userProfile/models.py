@@ -16,6 +16,7 @@ class Task(models.Model):
     title = models.CharField(max_length=50)
     description = models.CharField(max_length=50)
     isCompleted = models.BooleanField(default=False)
+    isExpired = models.BooleanField(default=False)
     wasCompletedBefore = models.BooleanField(default=False)
     subject = models.CharField(max_length=50)
     taskType = models.CharField(max_length=50)
@@ -50,6 +51,10 @@ class Task(models.Model):
             self.save()
             return True
         return False
+    
+    def calcIfExpired(self):
+        if datetime.date.today >= self.dateTime_due:
+            self.isExpired = True
 
 class TaskReminder(models.Model):
     task = models.OneToOneField(Task, on_delete=models.CASCADE, related_name='reminder')

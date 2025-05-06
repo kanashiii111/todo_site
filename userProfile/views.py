@@ -1,14 +1,18 @@
 ## Фронт
 import json
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.views import View
 from django.views.decorators.http import require_POST, require_http_methods
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.core.files.base import ContentFile
+from django.contrib.auth import authenticate, update_session_auth_hash, logout
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
+import base64
 
 from django.shortcuts import get_object_or_404
 from .models import Task, TaskReminder
 from .forms import SUBJECT_CHOICES, TASKTYPE_CHOICES
-from django.contrib.auth import logout, update_session_auth_hash
 import calendar
 from django.utils.decorators import method_decorator
 from .filters import TaskFilter
@@ -53,426 +57,481 @@ def telegram_webhook(request):
 
 # Настройки
 
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET"])
 def api_settingsView(request):
     profile = get_object_or_404(Profile, user=request.user)
-    
-    # Handle JSON requests
-    if request.content_type == 'application/json':
-        try:
-            data = json.loads(request.body) if request.body else {}
-        except json.JSONDecodeError:
-            return JsonResponse({'error': 'Invalid JSON'}, status=400)
-        
-        # Process different actions
-        if request.method == 'POST':
-            action = data.get('action')
-            
-            if action == 'logout':
-                logout(request)
-                return JsonResponse({'success': True, 'message': 'Succesfully logged out'})
-            
-            elif action == 'setTelegramNotis':
-                profile.telegram_notifications = not profile.telegram_notifications
-                profile.save()
-                return JsonResponse({
-                    'success': True,
-                    'telegram_notifications': profile.telegram_notifications
-                })
-            
-            elif action == 'save_chat_id':
-                chat_id = data.get('telegram_chat_id', '').strip()
-                if chat_id:
-                    profile.telegram_chat_id = chat_id
-                    profile.save()
-                    return JsonResponse({
-                        'success': True,
-                        'telegram_chat_id': profile.telegram_chat_id
-                    })
-                return JsonResponse({'error': 'Invalid chat ID'}, status=400)
-            
-            elif action == 'edit_profile':
-                new_username = data.get('username', '').strip()
-                new_status = data.get('status', '').strip()
-                
-                if new_username:
-                    request.user.username = new_username
-                    request.user.save()
-                
-                profile.status = new_status
-                profile.save()
-                
-                return JsonResponse({
-                    'success': True,
-                    'username': request.user.username,
-                    'status': profile.status
-                })
-            
-            elif action == 'change_password':
-                old_password = data.get('old_password')
-                new_password1 = data.get('new_password1')
-                new_password2 = data.get('new_password2')
-                
-                if not all([old_password, new_password1, new_password2]):
-                    return JsonResponse({'error': 'All password fields are required'}, status=400)
-                
-                if not request.user.check_password(old_password):
-                    return JsonResponse({'error': 'Incorrect old password'}, status=400)
-                
-                if new_password1 != new_password2:
-                    return JsonResponse({'error': 'New passwords do not match'}, status=400)
-                
-                request.user.set_password(new_password1)
-                request.user.save()
-                update_session_auth_hash(request, request.user)
-                
-                return JsonResponse({'success': True, 'message': 'Password changed'})
-            
-            elif action == 'change_email':
-                new_email = data.get('new_email', '').strip()
-                if not new_email:
-                    return JsonResponse({'error': 'Email is required'}, status=400)
-                
-                request.user.email = new_email
-                request.user.save()
-                profile.email = new_email
-                profile.save()
-                
-                return JsonResponse({
-                    'success': True,
-                    'email': request.user.email,
-                })
-            
-            return JsonResponse({'error': 'Invalid action'}, status=400)
-        
-        # GET request - return current settings
-        return JsonResponse({
-            'profile': {
-                'username': request.user.username,
-                'email': request.user.email,
-                'status': profile.status,
-                'avatar_url': profile.avatar.url if profile.avatar else None,
-                'telegram_notifications': profile.telegram_notifications,
-                'telegram_chat_id': profile.telegram_chat_id,
-            }
-        })
+
+    return JsonResponse({
+        'profile': {
+            'username': request.user.username,
+            'email': request.user.email,
+            'status': profile.status,
+            'avatar_url': profile.avatar.url if profile.avatar else None,
+            'telegram_notifications': profile.telegram_notifications,
+            'telegram_chat_id': profile.telegram_chat_id,
+        }
+    })
+
+@require_http_methods(["POST"])
+def api_settingsLogout(request):
+    logout(request)
+    return JsonResponse({'success': True, 'message': 'Successfully logged out'})
  
+@require_http_methods(["PATCH"])
+def api_settings_toggle_telegram_notifications(request):
+    profile = request.user.profile
+    profile.telegram_notifications = not profile.telegram_notifications
+    profile.save()
+    return JsonResponse({
+        'success': True,
+        'telegram_notifications': profile.telegram_notifications
+    })
+    
+@require_http_methods(["PATCH"])
+def api_settings_save_chat_id(request):
+    profile = request.user.profile
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    chat_id = data.get('telegram_chat_id', profile.telegram_chat_id)
+    if chat_id:
+        profile.telegram_chat_id = chat_id
+        profile.save()
+        return JsonResponse({
+            'success': True,
+            'telegram_chat_id': profile.telegram_chat_id
+        })
+    return JsonResponse({'error': 'Invalid chat ID'}, status=400)
+
+@require_http_methods(["PATCH"])
+def api_settings_edit_profile(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+
+    user = request.user
+    profile = user.profile
+    response_data = {'success': True}
+
+    try:
+        # Для обработки multipart/form-data (аватар) и JSON (остальные данные)
+        if request.content_type == 'multipart/form-data':
+            data = request.POST.dict()
+            files = request.FILES
+        else:
+            try:
+                data = json.loads(request.body)
+            except json.JSONDecodeError:
+                return JsonResponse({'error': 'Invalid JSON'}, status=400)
+            files = None
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+    # Обновление аватара
+    if 'avatar' in request.FILES:
+        profile.avatar = request.FILES['avatar']
+        response_data['avatar_url'] = profile.avatar.url if profile.avatar else None
+    elif 'avatar' in data and data['avatar'] is None:
+        # Удаление аватара
+        profile.avatar.delete(save=False)
+        response_data['avatar_url'] = None
+    elif 'avatar' in data and isinstance(data['avatar'], str) and data['avatar'].startswith('data:image'):
+        # Base64 изображение
+        try:
+            format, imgstr = data['avatar'].split(';base64,')
+            ext = format.split('/')[-1]
+            avatar_file = ContentFile(base64.b64decode(imgstr), name=f'avatar.{ext}')
+            profile.avatar.save(avatar_file.name, avatar_file, save=False)
+            response_data['avatar_url'] = profile.avatar.url
+        except Exception as e:
+            return JsonResponse({'error': f'Invalid avatar image: {str(e)}'}, status=400)
+
+    # Обновление никнейма
+    if 'username' in data:
+        new_username = data['username'].strip()
+        if new_username and new_username != user.username:
+            if len(new_username) < 3:
+                return JsonResponse({'error': 'Username too short (min 3 chars)'}, status=400)
+            user.username = new_username
+            response_data['username'] = new_username
+
+    # Обновление почты
+    if 'email' in data:
+        new_email = data['email'].strip()
+        if new_email and new_email != user.email:
+            if '@' not in new_email:
+                return JsonResponse({'error': 'Invalid email format'}, status=400)
+            user.email = new_email
+            response_data['email'] = new_email
+
+    # Обновление пароля
+    if 'password' in data and 'current_password' in data:
+        current_password = data['current_password']
+        new_password = data['password']
+        
+        if not authenticate(username=user.username, password=current_password):
+            return JsonResponse({'error': 'Current password is incorrect'}, status=400)
+        
+        try:
+            validate_password(new_password, user)
+        except ValidationError as e:
+            return JsonResponse({'error': ' '.join(e.messages)}, status=400)
+        
+        user.set_password(new_password)
+        update_session_auth_hash(request, user)
+        response_data['password_changed'] = True
+
+    # Сохранение изменений
+    try:
+        user.save()
+        profile.save()
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse(response_data)
+
 ## Задачи   
     
-@require_http_methods(["GET", "POST", "DELETE", "PUT"])
+SUBJECT_CHOICES = {
+    "Программирование": "Программирование",
+    "Информатика": "Информатика",
+    "Дискретная математика": "Дискретная математика",
+}
+
+TASKTYPE_CHOICES = {
+    "Лабораторная работа": "Лабораторная работа",
+    "Практическая работа": "Практическая работа", 
+    "Домашняя работа": "Домашняя работа", 
+    "Экзамен": "Экзамен",
+}
+
+@require_http_methods(["GET"])
 def api_tasksView(request):
     profile = request.user.profile
-    
-    # JSON API Handling
-    if request.content_type == 'application/json':
-        try:
-            data = json.loads(request.body) if request.body else {}
-        except json.JSONDecodeError:
-            return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
-        # POST/DELETE Actions
-        if request.method in ['POST', 'DELETE', 'PUT']:
-            action = data.get('action')
-            task_id = data.get('task_id')
+    search_query = request.GET.get('search', '')
+    tasks = Task.objects.filter(user=request.user)
 
-            if action == 'createTask':
-                try:
-                    title = data.get('title')
-                    description = data.get('description', '')
-                    subject = data.get('subject')
-                    task_type = data.get('taskType')
-                    date_time_due = data.get('dateTime_due')
-                    telegram_notifications = data.get('telegram_notifications', False)
-                    
-                    # Валидация обязательных полей
-                    if not all([title, subject, task_type, date_time_due]):
-                        return JsonResponse({'error': 'Missing required fields'}, status=400)
-                    
-                    # Проверка допустимых значений subject
-                    SUBJECT_CHOICES = {
-                        "Программирование": "Программирование",
-                        "Информатика": "Информатика",
-                        "Дискретная математика": "Дискретная математика",
-                    }
-                    if subject not in SUBJECT_CHOICES:
-                        return JsonResponse({
-                            'error': f'Invalid subject. Allowed values: {", ".join(SUBJECT_CHOICES.keys())}'
-                        }, status=400)
-                    
-                    # Проверка допустимых значений taskType
-                    TASKTYPE_CHOICES = {
-                        "Лабораторная работа": "Лабораторная работа",
-                        "Практическая работа": "Практическая работа", 
-                        "Домашняя работа": "Домашняя работа", 
-                        "Экзамен": "Экзамен",
-                    }
-                    if task_type not in TASKTYPE_CHOICES:
-                        return JsonResponse({
-                            'error': f'Invalid taskType. Allowed values: {", ".join(TASKTYPE_CHOICES.keys())}'
-                        }, status=400)
-                    
-                    try:
-                        due_date = datetime.datetime.strptime(date_time_due, '%d-%m-%YT%H:%M:%S')
-                        if timezone.is_aware(due_date):
-                            due_date = timezone.make_naive(due_date)
-                    except (ValueError, TypeError):
-                        return JsonResponse({'error': 'Invalid date format. Use DD-MM-YYYYTHH:MM:SS'}, status=400)
-                    
-                    # Создаем задачу
-                    task = Task.objects.create(
-                        user=request.user,
-                        title=title,
-                        description=description,
-                        subject=subject,
-                        taskType=task_type,
-                        dateTime_due=due_date
-                    )
-                    
-                    response_data = {
-                        'success': True,
-                        'message': 'Task created successfully',
-                        'task': {
-                            'id': task.id,
-                            'title': task.title,
-                            'description': task.description,
-                            'subject': task.subject,
-                            'taskType': task.taskType,
-                            'dateTime_due': task.dateTime_due.isoformat(),
-                            'isCompleted': task.isCompleted
-                        }
-                    }
-                    
-                    # Обработка напоминаний
-                    if telegram_notifications and profile.telegram_notifications:
-                        remind_before_days = data.get('remind_before_days', 1)
-                        repeat_interval = data.get('repeat_interval', 0)
-                        reminder_time = data.get('reminder_time', '09:00')
-                        
-                        try:
-                            reminder_time_obj = datetime.datetime.strptime(reminder_time, '%H:%M').time()
-                        except ValueError:
-                            reminder_time_obj = datetime.time(9, 0)
-                        
-                        # Создаем напоминание
-                        TaskReminder.objects.create(
-                            task=task,
-                            remind_before_days=remind_before_days,
-                            repeat_interval=repeat_interval,
-                            reminder_time=reminder_time_obj
-                        )
-                        
-                        response_data['task']['reminder'] = {
-                            'remind_before_days': remind_before_days,
-                            'repeat_interval': repeat_interval,
-                            'reminder_time': reminder_time
-                        }
-                        response_data['message'] = 'Task with reminder created successfully'
-                    
-                    return JsonResponse(response_data)
-                    
-                except Exception as e:
-                    return JsonResponse({'error': f'Task creation failed: {str(e)}'}, status=500)
-            elif action == 'delete_task':
-                task = get_object_or_404(Task, id=task_id, user=request.user)
-                task.delete()
-                return JsonResponse({'success': True, 'message': 'Task deleted'})
-            elif action == "edit_task":
-                task = get_object_or_404(Task, id=task_id, user=request.user)
-    
-                try:
-                    # Получаем обновленные данные
-                    new_title = data.get('title', task.title)
-                    new_description = data.get('description', task.description)
-                    new_subject = data.get('subject', task.subject)
-                    new_task_type = data.get('taskType', task.taskType)
-                    new_date_time_due = data.get('dateTime_due', task.dateTime_due.isoformat())
-                    telegram_notifications = data.get('telegram_notifications', False)
-                    
-                    # Проверка допустимых значений subject
-                    SUBJECT_CHOICES = {
-                        "Программирование": "Программирование",
-                        "Информатика": "Информатика",
-                        "Дискретная математика": "Дискретная математика",
-                    }
-                    if new_subject not in SUBJECT_CHOICES:
-                        return JsonResponse({
-                            'error': f'Invalid subject. Allowed values: {", ".join(SUBJECT_CHOICES.keys())}'
-                        }, status=400)
-                    
-                    # Проверка допустимых значений taskType
-                    TASKTYPE_CHOICES = {
-                        "Лабораторная работа": "Лабораторная работа",
-                        "Практическая работа": "Практическая работа", 
-                        "Домашняя работа": "Домашняя работа", 
-                        "Экзамен": "Экзамен",
-                    }
-                    if new_task_type not in TASKTYPE_CHOICES:
-                        return JsonResponse({
-                            'error': f'Invalid taskType. Allowed values: {", ".join(TASKTYPE_CHOICES.keys())}'
-                        }, status=400)
+    if search_query:
+        tasks = tasks.filter(
+            Q(title__icontains=search_query) | 
+            Q(description__icontains=search_query)
+        )
 
-                    # Обновляем основные поля задачи
-                    task.title = new_title
-                    task.description = new_description
-                    task.subject = new_subject
-                    task.taskType = new_task_type
-                    
-                    # Обрабатываем дату
-                    try:
-                        if isinstance(new_date_time_due, str):
-                            due_date = datetime.datetime.strptime(new_date_time_due, '%d-%m-%YT%H:%M:%S')
-                            if timezone.is_aware(due_date):
-                                due_date = timezone.make_naive(due_date)
-                            task.dateTime_due = due_date
-                    except (ValueError, TypeError) as e:
-                        return JsonResponse({'error': f'Invalid date format: {str(e)}'}, status=400)
-                    
-                    # Сохраняем задачу
-                    task.save()
-                    
-                    response_data = {
-                        'success': True,
-                        'message': 'Task updated successfully',
-                        'task': {
-                            'id': task.id,
-                            'title': task.title,
-                            'description': task.description,
-                            'subject': task.subject,
-                            'taskType': task.taskType,
-                            'dateTime_due': task.dateTime_due.isoformat(),
-                            'isCompleted': task.isCompleted
-                        }
-                    }
-                    
-                    # Обработка напоминаний
-                    if hasattr(task, 'reminder'):
-                        current_reminder = task.reminder
-                        
-                        if telegram_notifications and profile.telegram_notifications:
-                            # Обновляем существующее напоминание
-                            remind_before_days = data.get('remind_before_days', current_reminder.remind_before_days)
-                            repeat_interval = data.get('repeat_interval', current_reminder.repeat_interval)
-                            reminder_time = data.get('reminder_time', current_reminder.reminder_time.strftime('%H:%M'))
-                            
-                            try:
-                                reminder_time_obj = datetime.datetime.strptime(reminder_time, '%H:%M').time()
-                            except ValueError:
-                                reminder_time_obj = datetime.time(9, 0)
-                            
-                            current_reminder.remind_before_days = remind_before_days
-                            current_reminder.repeat_interval = repeat_interval
-                            current_reminder.reminder_time = reminder_time_obj
-                            current_reminder.save()
-                            
-                            response_data['task']['reminder'] = {
-                                'remind_before_days': remind_before_days,
-                                'repeat_interval': repeat_interval,
-                                'reminder_time': reminder_time
-                            }
-                        else:
-                            # Удаляем напоминание, если уведомления отключены
-                            current_reminder.delete()
-                            response_data['message'] = 'Task updated (reminder removed)'
-                    elif telegram_notifications and profile.telegram_notifications:
-                        # Создаем новое напоминание
-                        remind_before_days = data.get('remind_before_days', 1)
-                        repeat_interval = data.get('repeat_interval', 0)
-                        reminder_time = data.get('reminder_time', '09:00')
-                        
-                        try:
-                            reminder_time_obj = datetime.datetime.strptime(reminder_time, '%H:%M').time()
-                        except ValueError:
-                            reminder_time_obj = datetime.time(9, 0)
-                        
-                        TaskReminder.objects.create(
-                            task=task,
-                            remind_before_days=remind_before_days,
-                            repeat_interval=repeat_interval,
-                            reminder_time=reminder_time_obj
-                        )
-                        
-                        response_data['task']['reminder'] = {
-                            'remind_before_days': remind_before_days,
-                            'repeat_interval': repeat_interval,
-                            'reminder_time': reminder_time
-                        }
-                        response_data['message'] = 'Task updated with new reminder'
-                    
-                    return JsonResponse(response_data)
-                    
-                except Exception as e:
-                    return JsonResponse({'error': f'Task update failed: {str(e)}'}, status=500)
+    task_filter = TaskFilter(request.GET, queryset=Task.objects.filter(user=request.user))
+    tasks = task_filter.qs.order_by('dateTime_due')
 
-            elif action == 'toggle_completeTask':
-                task = get_object_or_404(Task, id=task_id, user=request.user)
-                if not task.isCompleted:
-                    task.complete_task()
-                else:
-                    task.isCompleted = False
-                    task.save()
-                return JsonResponse({
-                    'success': True,
-                    'isCompleted': task.isCompleted
+    now = timezone.now()
+    today = now.date()
+    days = []
+
+    for i in range(7):
+        current_date = today + timedelta(days=i)
+        day_name = "Сегодня" if i == 0 else "Завтра" if i == 1 else current_date.strftime("%d.%m.%Y")
+        
+        start_of_day = datetime.combine(current_date, time.min, tzinfo=timezone.get_current_timezone())
+        end_of_day = datetime.combine(current_date, time.max, tzinfo=timezone.get_current_timezone())
+        
+        day_tasks = []
+        for task in tasks:
+            task_due_local = timezone.localtime(task.dateTime_due)
+            if start_of_day <= task_due_local <= end_of_day:
+                day_tasks.append({
+                    'id': task.id,
+                    'title': task.title,
+                    'description': task.description,
+                    'isCompleted': task.isCompleted,
+                    'due_date': task.dateTime_due.isoformat(),
+                    'subject': task.subject,
+                    'task_type': task.taskType
                 })
-
-        # GET Request - Return tasks data
-        search_query = request.GET.get('search', '')
-        tasks = Task.objects.filter(user=request.user)
-
-        if search_query:
-            tasks = tasks.filter(
-                Q(title__icontains=search_query) | 
-                Q(description__icontains=search_query)
-            )
-
-        task_filter = TaskFilter(request.GET, queryset=Task.objects.filter(user=request.user))
-        tasks = task_filter.qs.order_by('dateTime_due')
-
-        now = timezone.now()
-        today = now.date()
-        days = []
-
-        for i in range(7):
-            current_date = today + timedelta(days=i)
-            day_name = "Сегодня" if i == 0 else "Завтра" if i == 1 else current_date.strftime("%d.%m.%Y")
-            
-            start_of_day = datetime.combine(current_date, time.min, tzinfo=timezone.get_current_timezone())
-            end_of_day = datetime.combine(current_date, time.max, tzinfo=timezone.get_current_timezone())
-            
-            day_tasks = []
-            for task in tasks:
-                task_due_local = timezone.localtime(task.dateTime_due)
-                if start_of_day <= task_due_local <= end_of_day:
-                    day_tasks.append({
-                        'id': task.id,
-                        'title': task.title,
-                        'description': task.description,
-                        'isCompleted': task.isCompleted,
-                        'due_date': task.dateTime_due.isoformat(),
-                        'subject': task.subject,
-                        'task_type': task.taskType
-                    })
-            
-            days.append({
-                'date': current_date.strftime("%Y-%m-%d"),
-                'name': day_name,
-                'tasks': day_tasks
-            })
-
-        return JsonResponse({
-            'days': days,
-            'subject_choices': dict(SUBJECT_CHOICES),
-            'task_type_choices': dict(TASKTYPE_CHOICES),
-            'profile': {
-                'username': profile.user.username,
-                'avatar_url': profile.avatar.url if profile.avatar else None
-            }
+        
+        days.append({
+            'date': current_date.strftime("%Y-%m-%d"),
+            'name': day_name,
+            'tasks': day_tasks
         })
 
-def get_day_tasks(request):
-    date_str = request.GET.get('date')
+    return JsonResponse({
+        'profile': profile.user.username, 
+        'days': days,
+        'subject_choices': dict(SUBJECT_CHOICES),
+        'task_type_choices': dict(TASKTYPE_CHOICES),
+    })
+    
+@require_http_methods(["POST"])
+def api_taskCreate(request):
     try:
-        selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    profile = request.user.profile
+
+    try:
+        title = data.get('title')
+        description = data.get('description', '')
+        subject = data.get('subject')
+        task_type = data.get('taskType')
+        date_time_due = data.get('dateTime_due')
+        telegram_notifications = data.get('telegram_notifications', False)
+        
+        # Валидация обязательных полей
+        if not all([title, subject, task_type, date_time_due]):
+            return JsonResponse({'error': 'Missing required fields: title, subject, taskType, dateTime_due'}, status=400)
+        
+        # Проверка допустимых значений subject
+        if subject not in SUBJECT_CHOICES:
+            return JsonResponse({
+                'error': f'Invalid subject. Allowed values: {", ".join(SUBJECT_CHOICES.keys())}'
+            }, status=400)
+        
+        # Проверка допустимых значений taskType
+        if task_type not in TASKTYPE_CHOICES:
+            return JsonResponse({
+                'error': f'Invalid taskType. Allowed values: {", ".join(TASKTYPE_CHOICES.keys())}'
+            }, status=400)
+        
+        try:
+            due_date = datetime.strptime(date_time_due, '%d-%m-%YT%H:%M')
+            if timezone.is_aware(due_date):
+                due_date = timezone.make_naive(due_date)
+        except (ValueError, TypeError):
+            return JsonResponse({'error': 'Invalid date format. Use DD-MM-YYYYTHH:MM'}, status=400)
+        
+        # Создаем задачу
+        task = Task.objects.create(
+            user=request.user,
+            title=title,
+            description=description,
+            subject=subject,
+            taskType=task_type,
+            dateTime_due=due_date
+        )
+        
+        response_data = {
+            'success': True,
+            'message': 'Task created successfully',
+            'profile' : profile.user.username,
+            'task': {
+                'id': task.id,
+                'title': task.title,
+                'description': task.description,
+                'subject': task.subject,
+                'taskType': task.taskType,
+                'dateTime_due': task.dateTime_due.isoformat(),
+                'isCompleted': task.isCompleted
+            },
+        }
+        
+        # Обработка напоминаний
+        if telegram_notifications and profile.telegram_notifications:
+            remind_before_days = data.get('remind_before_days', 1)
+            repeat_interval = data.get('repeat_interval', 0)
+            reminder_time = data.get('reminder_time', '09:00')
+            
+            try:
+                reminder_time_obj = datetime.strptime(reminder_time, '%H:%M').time()
+            except ValueError:
+                reminder_time_obj = datetime.time(9, 0)
+            
+            # Создаем напоминание
+            TaskReminder.objects.create(
+                task=task,
+                remind_before_days=remind_before_days,
+                repeat_interval=repeat_interval,
+                reminder_time=reminder_time_obj
+            )
+            
+            response_data['task']['reminder'] = {
+                'remind_before_days': remind_before_days,
+                'repeat_interval': repeat_interval,
+                'reminder_time': reminder_time
+            }
+            response_data['message'] = 'Task with reminder created successfully'
+        
+        return JsonResponse(response_data)
+        
+    except Exception as e:
+        return JsonResponse({'error': f'Task creation failed: {str(e)}'}, status=500)
+
+@require_http_methods(["DELETE"])
+def api_taskDelete(request, task_id):
+    try:
+        task = get_object_or_404(Task, id=task_id, user=request.user)
+        task.delete()
+        return JsonResponse({
+            'success': True, 
+            'message': 'Task deleted'
+        })
+    except Http404:
+        return JsonResponse({
+            'success': False, 
+            'message': 'Task by this id is nonexistent'
+        })
+    
+@require_http_methods(["PUT"])
+def api_taskEdit(request, task_id):
+    try:
+        task = get_object_or_404(Task, id=task_id, user=request.user)
+    except Http404:
+        return JsonResponse({
+            'error': 'Task by this id is nonexistent'
+        })
+    profile = request.user.profile
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    try:
+        # Получаем обновленные данные
+        new_title = data.get('title', task.title)
+        new_description = data.get('description', task.description)
+        new_subject = data.get('subject', task.subject)
+        new_task_type = data.get('taskType', task.taskType)
+        new_date_time_due = data.get('dateTime_due', task.dateTime_due)
+        telegram_notifications = data.get('telegram_notifications', False)
+        
+        # Проверка допустимых значений subject
+
+        if new_subject not in SUBJECT_CHOICES:
+            return JsonResponse({
+                'error': f'Invalid subject. Allowed values: {", ".join(SUBJECT_CHOICES.keys())}'
+            }, status=400)
+        
+        # Проверка допустимых значений taskType
+
+        if new_task_type not in TASKTYPE_CHOICES:
+            return JsonResponse({
+                'error': f'Invalid taskType. Allowed values: {", ".join(TASKTYPE_CHOICES.keys())}'
+            }, status=400)
+        
+        # Обрабатываем дату
+
+        try:
+            if isinstance(new_date_time_due, str):
+                due_date = datetime.strptime(new_date_time_due, '%d-%m-%YT%H:%M')
+                if timezone.is_aware(due_date):
+                    due_date = timezone.make_naive(due_date)
+                task.dateTime_due = due_date
+        except (ValueError, TypeError) as e:
+            return JsonResponse({'error': f'Invalid date format: {str(e)}'}, status=400)
+        
+        task.title = new_title
+        task.description = new_description
+        task.subject = new_subject
+        task.taskType = new_task_type
+        task.save()
+        
+        response_data = {
+            'success': True,
+            'message': 'Task updated successfully',
+            'profile': profile.user.username,
+            'task': {
+                'id': task.id,
+                'title': task.title,
+                'description': task.description,
+                'subject': task.subject,
+                'taskType': task.taskType,
+                'dateTime_due': task.dateTime_due.isoformat(),
+                'isCompleted': task.isCompleted
+            }
+        }
+        
+        # Обработка напоминаний
+        if hasattr(task, 'reminder'):
+            current_reminder = task.reminder
+            
+            if telegram_notifications and profile.telegram_notifications:
+                # Обновляем существующее напоминание
+                remind_before_days = data.get('remind_before_days', current_reminder.remind_before_days)
+                repeat_interval = data.get('repeat_interval', current_reminder.repeat_interval)
+                reminder_time = data.get('reminder_time', current_reminder.reminder_time.strftime('%H:%M'))
+                
+                try:
+                    reminder_time_obj = datetime.strptime(reminder_time, '%H:%M').time()
+                except ValueError:
+                    reminder_time_obj = datetime.time(9, 0)
+                
+                current_reminder.remind_before_days = remind_before_days
+                current_reminder.repeat_interval = repeat_interval
+                current_reminder.reminder_time = reminder_time_obj
+                current_reminder.save()
+                
+                response_data['task']['reminder'] = {
+                    'remind_before_days': remind_before_days,
+                    'repeat_interval': repeat_interval,
+                    'reminder_time': reminder_time
+                }
+            else:
+                # Удаляем напоминание, если уведомления отключены
+                current_reminder.delete()
+                response_data['message'] = 'Task updated (reminder removed)'
+        elif telegram_notifications and profile.telegram_notifications:
+            # Создаем новое напоминание
+            remind_before_days = data.get('remind_before_days', 1)
+            repeat_interval = data.get('repeat_interval', 0)
+            reminder_time = data.get('reminder_time', '09:00')
+            
+            try:
+                reminder_time_obj = datetime.strptime(reminder_time, '%H:%M').time()
+            except ValueError:
+                reminder_time_obj = datetime.time(9, 0)
+            
+            TaskReminder.objects.create(
+                task=task,
+                remind_before_days=remind_before_days,
+                repeat_interval=repeat_interval,
+                reminder_time=reminder_time_obj
+            )
+            
+            response_data['task']['reminder'] = {
+                'remind_before_days': remind_before_days,
+                'repeat_interval': repeat_interval,
+                'reminder_time': reminder_time
+            }
+            response_data['message'] = 'Task updated with new reminder'
+        
+        return JsonResponse(response_data)
+    except Exception as e:
+        return JsonResponse({'error': f'Task edit failed: {str(e)}'}, status=500)
+
+@require_http_methods(["PATCH"])
+def api_task_toggle_complete(request, task_id):
+    try:
+        task = get_object_or_404(Task, id=task_id, user=request.user)
+    except:
+        return JsonResponse({
+            "error" : "Task by this id is nonexistent"
+        })
+    profile = request.user.profile
+    if not task.isCompleted:
+        task.complete_task()
+    else:
+        task.isCompleted = False
+        task.save()
+    return JsonResponse({
+        'profile': profile.user.username,
+        'success': True,
+        'isCompleted': task.isCompleted,
+    })
+
+@require_http_methods(["GET"])
+def api_selected_date_taskView(request):
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    date_str = data.get('date')
+    profile = request.user.profile
+
+    try:
+        selected_date = datetime.strptime(date_str, '%d-%m-%Y').date()
     except (ValueError, TypeError):
         return JsonResponse({'error': 'Invalid date format'}, status=400)
     
@@ -486,7 +545,7 @@ def get_day_tasks(request):
     ).order_by('dateTime_due')
     
     tasks_data = [
-        {
+        {   
             'id': task.id,
             'title': task.title,
             'dateTime_due': task.dateTime_due.isoformat(),
@@ -494,10 +553,15 @@ def get_day_tasks(request):
         for task in tasks
     ]
     
-    return JsonResponse({'tasks': tasks_data})
-    
-def get_task_data(request, task_id):
+    return JsonResponse({
+        'profile': profile.user.username,
+        'tasks': tasks_data
+    })
+
+@require_http_methods(["GET"])
+def api_taskView(request, task_id):
     task = get_object_or_404(Task, id=task_id, user=request.user)
+    profile = request.user.profile
     try:
         reminder = task.reminder
         reminder_data = {
@@ -512,6 +576,7 @@ def get_task_data(request, task_id):
             'reminder_time': '09:00',
         }
     return JsonResponse({
+        'profile': profile.user.username,
         'title': task.title,
         'description': task.description,
         'subject': task.subject,
@@ -525,7 +590,6 @@ def get_task_data(request, task_id):
 @method_decorator(require_http_methods(["GET"]), name='dispatch')
 class api_calendarView(View):
     def get(self, request, *args, **kwargs):
-        # JSON API Handling
         if request.content_type == 'application/json':
             return self.handle_json_request(request)
     
