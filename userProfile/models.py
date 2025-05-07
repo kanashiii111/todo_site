@@ -16,6 +16,9 @@ class Tag(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tags')
     tasks = models.ManyToManyField('Task', related_name='task_tags', blank=True)
 
+    def __str__(self):
+        return self.name
+    
 class Task(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tasks')
     title = models.CharField(max_length=50)
