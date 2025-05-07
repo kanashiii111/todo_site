@@ -4,21 +4,17 @@ from django.http import Http404, JsonResponse
 from django.views import View
 from django.views.decorators.http import require_POST, require_http_methods
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
-from django.core.files.base import ContentFile
 from django.contrib.auth import authenticate, update_session_auth_hash, logout
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 import base64
 
 from django.shortcuts import get_object_or_404
-from .models import Task, TaskReminder
-from .forms import SUBJECT_CHOICES, TASKTYPE_CHOICES
+from .models import Tag, Task, TaskReminder
 import calendar
 from django.utils.decorators import method_decorator
-from .filters import TaskFilter
 from datetime import datetime, time, timedelta, date
 from django.utils import timezone
-from django.db.models import Q
 import requests
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
@@ -64,11 +60,11 @@ def api_settingsView(request):
     return JsonResponse({
         'profile': {
             'username': request.user.username,
-            'email': request.user.email,
             'status': profile.status,
-            'avatar_url': profile.avatar.url if profile.avatar else None,
             'telegram_notifications': profile.telegram_notifications,
             'telegram_chat_id': profile.telegram_chat_id,
+            'current_xp': str(profile.xp),
+            'xp_for_next_status': str(profile.xp_for_next_status())
         }
     })
 
@@ -115,37 +111,9 @@ def api_settings_edit_profile(request):
     response_data = {'success': True}
 
     try:
-        # Для обработки multipart/form-data (аватар) и JSON (остальные данные)
-        if request.content_type == 'multipart/form-data':
-            data = request.POST.dict()
-            files = request.FILES
-        else:
-            try:
-                data = json.loads(request.body)
-            except json.JSONDecodeError:
-                return JsonResponse({'error': 'Invalid JSON'}, status=400)
-            files = None
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
-
-    # Обновление аватара
-    if 'avatar' in request.FILES:
-        profile.avatar = request.FILES['avatar']
-        response_data['avatar_url'] = profile.avatar.url if profile.avatar else None
-    elif 'avatar' in data and data['avatar'] is None:
-        # Удаление аватара
-        profile.avatar.delete(save=False)
-        response_data['avatar_url'] = None
-    elif 'avatar' in data and isinstance(data['avatar'], str) and data['avatar'].startswith('data:image'):
-        # Base64 изображение
-        try:
-            format, imgstr = data['avatar'].split(';base64,')
-            ext = format.split('/')[-1]
-            avatar_file = ContentFile(base64.b64decode(imgstr), name=f'avatar.{ext}')
-            profile.avatar.save(avatar_file.name, avatar_file, save=False)
-            response_data['avatar_url'] = profile.avatar.url
-        except Exception as e:
-            return JsonResponse({'error': f'Invalid avatar image: {str(e)}'}, status=400)
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
     # Обновление никнейма
     if 'username' in data:
@@ -155,15 +123,6 @@ def api_settings_edit_profile(request):
                 return JsonResponse({'error': 'Username too short (min 3 chars)'}, status=400)
             user.username = new_username
             response_data['username'] = new_username
-
-    # Обновление почты
-    if 'email' in data:
-        new_email = data['email'].strip()
-        if new_email and new_email != user.email:
-            if '@' not in new_email:
-                return JsonResponse({'error': 'Invalid email format'}, status=400)
-            user.email = new_email
-            response_data['email'] = new_email
 
     # Обновление пароля
     if 'password' in data and 'current_password' in data:
@@ -210,52 +169,24 @@ TASKTYPE_CHOICES = {
 def api_tasksView(request):
     profile = request.user.profile
 
-    search_query = request.GET.get('search', '')
-    tasks = Task.objects.filter(user=request.user)
+    tasks = Task.objects.filter(user=request.user).order_by('dateTime_due')
 
-    if search_query:
-        tasks = tasks.filter(
-            Q(title__icontains=search_query) | 
-            Q(description__icontains=search_query)
-        )
-
-    task_filter = TaskFilter(request.GET, queryset=Task.objects.filter(user=request.user))
-    tasks = task_filter.qs.order_by('dateTime_due')
-
-    now = timezone.now()
-    today = now.date()
-    days = []
-
-    for i in range(7):
-        current_date = today + timedelta(days=i)
-        day_name = "Сегодня" if i == 0 else "Завтра" if i == 1 else current_date.strftime("%d.%m.%Y")
-        
-        start_of_day = datetime.combine(current_date, time.min, tzinfo=timezone.get_current_timezone())
-        end_of_day = datetime.combine(current_date, time.max, tzinfo=timezone.get_current_timezone())
-        
-        day_tasks = []
-        for task in tasks:
-            task_due_local = timezone.localtime(task.dateTime_due)
-            if start_of_day <= task_due_local <= end_of_day:
-                day_tasks.append({
-                    'id': task.id,
-                    'title': task.title,
-                    'description': task.description,
-                    'isCompleted': task.isCompleted,
-                    'due_date': task.dateTime_due.isoformat(),
-                    'subject': task.subject,
-                    'task_type': task.taskType
-                })
-        
-        days.append({
-            'date': current_date.strftime("%Y-%m-%d"),
-            'name': day_name,
-            'tasks': day_tasks
+    taskList = []
+    for task in tasks:
+        task_due_local = timezone.localtime(task.dateTime_due)
+        taskList.append({
+            'id': task.id,
+            'title': task.title,
+            'description': task.description,
+            'isCompleted': task.isCompleted,
+            'due_date': task_due_local,
+            'subject': task.subject,
+            'task_type': task.taskType
         })
 
     return JsonResponse({
         'profile': profile.user.username, 
-        'days': days,
+        'tasks': taskList,
         'subject_choices': dict(SUBJECT_CHOICES),
         'task_type_choices': dict(TASKTYPE_CHOICES),
     })
@@ -702,3 +633,135 @@ class api_calendarView(View):
             'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
         ]
         return month_names[date_obj.month - 1]
+    
+@require_http_methods(["GET"])
+def api_tagsView(request):
+    profile = request.user.profile
+    
+    tags = Tag.objects.filter(user=request.user).prefetch_related('tasks')
+    tagList = []
+    
+    for tag in tags:
+        tasks_list = []
+        for task in tag.tasks.all():
+            tasks_list.append({
+                'id': task.id,
+                'title': task.title,
+                'description': task.description,
+                'isCompleted': task.isCompleted,
+                'subject': task.subject,
+                'taskType': task.taskType,
+                'dateTime_due': task.dateTime_due.strftime("%d-%m-%YT%H:%M"),
+                'xp': task.xp
+            })
+        
+        tagList.append({
+            'id': tag.id,
+            'name': tag.name,
+            'tasks': tasks_list,
+            'tasks_count': len(tasks_list)
+        })
+
+    return JsonResponse({
+        'profile': profile.user.username, 
+        'tags': tagList,
+    }, safe=False)
+
+@require_http_methods(["GET"])
+def api_tagView(request, tag_id):
+    profile = request.user.profile
+    
+    tag = get_object_or_404(Tag, id=tag_id, user=request.user)   
+
+    return JsonResponse({
+        'profile': profile.user.username, 
+        'name': tag.name,
+    })
+
+@require_http_methods(["POST"])
+def api_tagCreate(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    profile = request.user.profile
+
+    try:
+        name = data.get('name')
+        
+        # Валидация обязательных полей
+        if not all([name]):
+            return JsonResponse({'error': 'Missing required fields: name'}, status=400)
+        
+        # Создаем задачу
+        tag = Tag.objects.create(
+            user=request.user,
+            name=name,
+        )
+        
+        response_data = {
+            'success': True,
+            'message': 'Tag created successfully',
+            'profile' : profile.user.username,
+            'tag': {
+                'id': tag.id,
+                'title': tag.name,
+            },
+        }
+        
+        return JsonResponse(response_data)
+        
+    except Exception as e:
+        return JsonResponse({'error': f'Tag creation failed: {str(e)}'}, status=500)
+
+@require_http_methods(["DELETE"])
+def api_tagDelete(request, tag_id):
+    try:
+        tag = get_object_or_404(Tag, id=tag_id, user=request.user)
+        tag.delete()
+        return JsonResponse({
+            'success': True, 
+            'message': 'Tag deleted'
+        })
+    except Http404:
+        return JsonResponse({
+            'success': False, 
+            'message': 'Tag by this id is nonexistent'
+        })
+    
+@require_http_methods(["PUT"])
+def api_tagEdit(request, tag_id):
+    try:
+        tag = get_object_or_404(Tag, id=tag_id, user=request.user)
+    except Http404:
+        return JsonResponse({
+            'error': 'Tag by this id is nonexistent'
+        })
+    profile = request.user.profile
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    try:
+        # Получаем обновленные данные
+        new_name = data.get('name', tag.name)
+        
+        tag.name = new_name
+        tag.save()
+        
+        response_data = {
+            'success': True,
+            'message': 'Tag updated successfully',
+            'profile': profile.user.username,
+            'tag': {
+                'id': tag.id,
+                'name': tag.name,
+            }
+        }
+        
+        return JsonResponse(response_data)
+    except Exception as e:
+        return JsonResponse({'error': f'Task edit failed: {str(e)}'}, status=500)

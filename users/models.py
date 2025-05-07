@@ -2,15 +2,14 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.dispatch import receiver
 from django.db.models.signals import post_save
-from userProfile.models import Task
+from userProfile.models import Task, Tag
 import hashlib
 
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    email = models.EmailField(unique=True, default='')
     status = models.CharField(max_length=50, default='#Завтра точно начну', blank=True, null=True)
-    avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
     tasks = models.ManyToManyField(Task)
+    tags = models.ManyToManyField(Tag)
     telegram_chat_id = models.CharField(max_length=50, blank=True, null=True)
     telegram_notifications = models.BooleanField(default=False)
     xp = models.IntegerField(default=0)
@@ -28,15 +27,6 @@ class Profile(models.Model):
         xp_needed_for_level = self.xp_for_next_status()
         current_lvl_xp = self.xp % xp_needed_for_level
         return int((current_lvl_xp / xp_needed_for_level) * 100) if xp_needed_for_level > 0 else 0
-    
-    def get_avatar_url(self):
-        if self.avatar:
-            return self.avatar.url
-        return self.get_gravatar_url()
-
-    def get_gravatar_url(self):
-        email_hash = hashlib.md5(self.email.lower().encode('utf-8')).hexdigest()
-        return f"https://www.gravatar.com/avatar/{email_hash}?d=identicon"
     
     def get_status(self):
         statuses = [
