@@ -44,11 +44,10 @@ def api_register(request):
 
     username = data.get('username')
     password = data.get('password')
-    email = data.get('email')
     
     if not username or not password:
         return JsonResponse(
-            {'error': 'Username, password and email are required'}, 
+            {'error': 'Username, password are required'}, 
             status=400
         )
 
@@ -64,7 +63,6 @@ def api_register(request):
         user = User.objects.create_user(
             username=username,
             password=password,
-            email=email
         )
 
         user.save()
@@ -74,7 +72,6 @@ def api_register(request):
             'user': {
                 'id': user.id,
                 'username': user.username,
-                'email': user.email
             }
         })
     
@@ -95,7 +92,6 @@ def check_auth_status(request):
             'user': {
                 'id': request.user.id,
                 'username': request.user.username,
-                'email': request.user.email,
             }
         })
     else:
