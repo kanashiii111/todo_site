@@ -30,7 +30,6 @@ def api_login(request):
             'user': {
                 'id': user.id,
                 'username': user.username,
-                'email': user.email
             }
         })
     else:

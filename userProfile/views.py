@@ -109,7 +109,8 @@ def api_settings_edit_profile(request):
     user = request.user
     profile = user.profile
     response_data = {'success': True}
-
+    old_username = user.username
+    
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
@@ -129,8 +130,8 @@ def api_settings_edit_profile(request):
         current_password = data['current_password']
         new_password = data['password']
         
-        if not authenticate(username=user.username, password=current_password):
-            return JsonResponse({'error': 'Current password is incorrect'}, status=400)
+        if not authenticate(username=old_username, password=current_password):
+            return JsonResponse({'error': 'Current password is incorrect', 'username' : user.username}, status=400)
         
         try:
             validate_password(new_password, user)
