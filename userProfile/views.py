@@ -747,21 +747,39 @@ def api_tagsDelete(request):
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
     try:
+
         response_data = {
             'profile' : profile.user.username,
+            'tasks_with_subject': [],
+            'tasks_with_taskType': []
         }
-        
+
+        tasks_with_subject= []
+        tasks_with_taskType = []
         subject_id = data.get('subject_id')
         taskType_id = data.get('taskType_id')
-        if subject_id: subject = get_object_or_404(Subject, id=subject_id, user=request.user)
-        if taskType_id: taskType = get_object_or_404(TaskType, id=taskType_id, user=request.user)
 
         if subject_id: 
+            subject = get_object_or_404(Subject, id=subject_id, user=request.user)
+            tasks_with_subject.extend(list(Task.objects.filter(subject=subject).values_list('id', flat=True)))
+        if taskType_id: 
+            taskType = get_object_or_404(TaskType, id=taskType_id, user=request.user)
+            tasks_with_taskType.extend(list(Task.objects.filter(taskType=taskType).values_list('id', flat=True)))
+
+        if subject_id and not tasks_with_subject: 
             subject.delete() 
             response_data['subject'] = {"success": True, "message": "Subject deleted"}
-        if taskType_id: 
+        else:
+            return JsonResponse({
+                "error": "Subject by this id is being used in tasks"
+            })
+        if taskType_id and not tasks_with_taskType: 
             taskType.delete()
             response_data['taskType'] = {"success": True, "message": "TaskType deleted"}
+        else:
+            return JsonResponse({
+                "error": "TaskType by this id is being used in tasks"
+            })
 
         return JsonResponse(response_data)
     except Http404:
