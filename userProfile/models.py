@@ -29,7 +29,7 @@ class Task(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tasks')
     title = models.CharField(max_length=50)
     description = models.CharField(max_length=50)
-    priority = models.IntegerField(default=1)
+    priority = models.IntegerField(default=4)
     isCompleted = models.BooleanField(default=False)
     isExpired = models.BooleanField(default=False)
     wasCompletedBefore = models.BooleanField(default=False)
