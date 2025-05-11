@@ -49,7 +49,6 @@ class Task(models.Model):
     def calc_xp_reward(self):
         return XP_REWARDS.get(self.priority, 0)
         
-        
     def complete_task(self):
         if not self.isCompleted:
             self.isCompleted = True
