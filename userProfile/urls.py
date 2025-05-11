@@ -43,10 +43,10 @@ urlpatterns = [
     # Теги
 
     path('api/tags/view_tags/', views.api_tagsView, name='api_tags_view'),
-    path('api/tags/view_tag/<int:tag_id>', views.api_tagView, name='api_tag_view'),
-    path('api/tags/create_tag/', views.api_tagCreate, name='api_tag_create'),
-    path('api/tags/delete_tag/<int:tag_id>', views.api_tagDelete, name='api_tag_delete'),
-    path('api/tags/edit_tag/<int:tag_id>', views.api_tagEdit, name='api_tag_edit'),
+    path('api/tags/view_tag/', views.api_tagView, name='api_tag_view'),
+    path('api/tags/create_tags/', views.api_tagsCreate, name='api_tags_create'),
+    path('api/tags/delete_tag/', views.api_tagsDelete, name='api_tags_delete'),
+    path('api/tags/edit_tag/', views.api_tagEdit, name='api_tag_edit'),
 
     # Вебхук
     

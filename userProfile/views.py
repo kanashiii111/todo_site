@@ -10,7 +10,7 @@ from django.core.exceptions import ValidationError
 import base64
 
 from django.shortcuts import get_object_or_404
-from .models import Tag, Task, TaskReminder
+from .models import Task, TaskReminder, Subject, TaskType
 import calendar
 from django.utils.decorators import method_decorator
 from datetime import datetime, time, timedelta, date
@@ -152,19 +152,6 @@ def api_settings_edit_profile(request):
     return JsonResponse(response_data)
 
 ## Задачи   
-    
-SUBJECT_CHOICES = {
-    "Программирование": "Программирование",
-    "Информатика": "Информатика",
-    "Дискретная математика": "Дискретная математика",
-}
-
-TASKTYPE_CHOICES = {
-    "Лабораторная работа": "Лабораторная работа",
-    "Практическая работа": "Практическая работа", 
-    "Домашняя работа": "Домашняя работа", 
-    "Экзамен": "Экзамен",
-}
 
 @require_http_methods(["GET"])
 def api_tasksView(request):
@@ -188,8 +175,6 @@ def api_tasksView(request):
     return JsonResponse({
         'profile': profile.user.username, 
         'tasks': taskList,
-        'subject_choices': dict(SUBJECT_CHOICES),
-        'task_type_choices': dict(TASKTYPE_CHOICES),
     })
     
 @require_http_methods(["POST"])
@@ -204,26 +189,21 @@ def api_taskCreate(request):
     try:
         title = data.get('title')
         description = data.get('description', '')
-        subject = data.get('subject')
-        task_type = data.get('taskType')
+        subject_id = data.get('subject_id')
+        task_type_id = data.get('taskType_id')
         date_time_due = data.get('dateTime_due')
         telegram_notifications = data.get('telegram_notifications', False)
         
         # Валидация обязательных полей
-        if not all([title, subject, task_type, date_time_due]):
-            return JsonResponse({'error': 'Missing required fields: title, subject, taskType, dateTime_due'}, status=400)
+        if not all([title, subject_id, task_type_id, date_time_due]):
+            return JsonResponse({'error': 'Missing required fields: title, subject_id, taskType_id, dateTime_due'}, status=400)
         
-        # Проверка допустимых значений subject
-        if subject not in SUBJECT_CHOICES:
-            return JsonResponse({
-                'error': f'Invalid subject. Allowed values: {", ".join(SUBJECT_CHOICES.keys())}'
-            }, status=400)
-        
-        # Проверка допустимых значений taskType
-        if task_type not in TASKTYPE_CHOICES:
-            return JsonResponse({
-                'error': f'Invalid taskType. Allowed values: {", ".join(TASKTYPE_CHOICES.keys())}'
-            }, status=400)
+        try:
+            subject = Subject.objects.get(id=subject_id)
+            task_type = TaskType.objects.get(id=task_type_id)
+        except (Subject.DoesNotExist, TaskType.DoesNotExist):
+            return JsonResponse({'error': 'Invalid subject or task type'}, status=400)
+
         
         try:
             due_date = datetime.strptime(date_time_due, '%d-%m-%YT%H:%M')
@@ -322,25 +302,19 @@ def api_taskEdit(request, task_id):
         # Получаем обновленные данные
         new_title = data.get('title', task.title)
         new_description = data.get('description', task.description)
-        new_subject = data.get('subject', task.subject)
-        new_task_type = data.get('taskType', task.taskType)
+        new_subject_id = data.get('subject_id', task.subject)
+        new_task_type_id = data.get('taskType_id', task.taskType)
         new_date_time_due = data.get('dateTime_due', task.dateTime_due)
         telegram_notifications = data.get('telegram_notifications', False)
         
         # Проверка допустимых значений subject
 
-        if new_subject not in SUBJECT_CHOICES:
-            return JsonResponse({
-                'error': f'Invalid subject. Allowed values: {", ".join(SUBJECT_CHOICES.keys())}'
-            }, status=400)
-        
-        # Проверка допустимых значений taskType
+        try:
+            new_subject = Subject.objects.get(id=new_subject_id)
+            new_task_type = TaskType.objects.get(id=new_task_type_id)
+        except (Subject.DoesNotExist, TaskType.DoesNotExist):
+            return JsonResponse({'error': 'Invalid subject or task type'}, status=400)
 
-        if new_task_type not in TASKTYPE_CHOICES:
-            return JsonResponse({
-                'error': f'Invalid taskType. Allowed values: {", ".join(TASKTYPE_CHOICES.keys())}'
-            }, status=400)
-        
         # Обрабатываем дату
 
         try:
@@ -598,10 +572,6 @@ class api_calendarView(View):
                     'xp': profile.xp,
                     'level': profile.level
                 },
-                'choices': {
-                    'subjects': dict(SUBJECT_CHOICES),
-                    'task_types': dict(TASKTYPE_CHOICES)
-                }
             })
             
         except Exception as e:
@@ -634,53 +604,70 @@ class api_calendarView(View):
             'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
         ]
         return month_names[date_obj.month - 1]
-    
+
 @require_http_methods(["GET"])
 def api_tagsView(request):
     profile = request.user.profile
-    
-    tags = Tag.objects.filter(user=request.user).prefetch_related('tasks')
-    tagList = []
-    
-    for tag in tags:
-        tasks_list = []
-        for task in tag.tasks.all():
-            tasks_list.append({
-                'id': task.id,
-                'title': task.title,
-                'description': task.description,
-                'isCompleted': task.isCompleted,
-                'subject': task.subject,
-                'taskType': task.taskType,
-                'dateTime_due': task.dateTime_due.strftime("%d-%m-%YT%H:%M"),
-                'xp': task.xp
-            })
-        
-        tagList.append({
-            'id': tag.id,
-            'name': tag.name,
-            'tasks': tasks_list,
-            'tasks_count': len(tasks_list)
+    subjects = Subject.objects.filter(user=request.user)
+    taskTypes = TaskType.objects.filter(user=request.user)
+
+    subjects_list = []
+    for subject in subjects:
+        subjects_list.append({
+            "name": subject.name,
+            "id": subject.id
+        })
+
+    taskTypes_list = []
+    for taskType in taskTypes:
+        taskTypes_list.append({
+            "name": taskType.name,
+            "id": taskType.id
         })
 
     return JsonResponse({
         'profile': profile.user.username, 
-        'tags': tagList,
-    }, safe=False)
-
-@require_http_methods(["GET"])
-def api_tagView(request, tag_id):
-    profile = request.user.profile
-    
-    tag = get_object_or_404(Tag, id=tag_id, user=request.user)   
-
-    return JsonResponse({
-        'profile': profile.user.username, 
-        'name': tag.name,
+        'subjects': subjects_list,
+        'taskTypes': taskTypes_list,
     })
 
+@require_http_methods(["GET"])
+def api_tagView(request):
+    profile = request.user.profile
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    try:
+        subject_id = data.get('subject_id')
+        taskType_id = data.get('taskType_id')
+        
+        if not subject_id and not taskType_id:
+            return JsonResponse({
+                'error': "Missing subject_id/taskType_id"
+            })
+            
+        response_data = {
+            'profile' : profile.user.username,
+        }
+        
+        if subject_id:
+            subject = get_object_or_404(Subject, id=subject_id, user=request.user)
+            response_data['subject'] = {'id': subject.id, 'name': subject.name}
+        
+        if taskType_id:
+            taskType = get_object_or_404(TaskType, id=taskType_id, user=request.user)
+            response_data['taskType'] = {'id': taskType.id, 'name': taskType.name}
+        
+        return JsonResponse(response_data)
+        
+    except Exception as e:
+        return JsonResponse({'error': f'Tag view failed: {str(e)}'}, status=500)
+
 @require_http_methods(["POST"])
-def api_tagCreate(request):
+def api_tagsCreate(request):
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
@@ -689,27 +676,33 @@ def api_tagCreate(request):
     profile = request.user.profile
 
     try:
-        name = data.get('name')
+        subject_name = data.get('subject_name')
+        taskType_name = data.get('taskType_name')
         
-        # Валидация обязательных полей
-        if not all([name]):
-            return JsonResponse({'error': 'Missing required fields: name'}, status=400)
-        
-        # Создаем задачу
-        tag = Tag.objects.create(
-            user=request.user,
-            name=name,
-        )
-        
+        if not subject_name and not taskType_name:
+            return JsonResponse({
+                'error': "Missing subject_name/taskType_name"
+            })
+            
         response_data = {
             'success': True,
-            'message': 'Tag created successfully',
+            'message': 'Tags created successfully',
             'profile' : profile.user.username,
-            'tag': {
-                'id': tag.id,
-                'title': tag.name,
-            },
         }
+        
+        if subject_name:
+            subject = Subject.objects.create(
+                user=request.user,
+                name=subject_name
+            )
+            response_data['subject'] = {'id': subject.id, 'name': subject_name}
+        
+        if taskType_name:
+            taskType = TaskType.objects.create(
+                user=request.user,
+                name=taskType_name
+            )
+            response_data['taskType'] = {'id': taskType.id, 'name': taskType_name}
         
         return JsonResponse(response_data)
         
@@ -717,14 +710,31 @@ def api_tagCreate(request):
         return JsonResponse({'error': f'Tag creation failed: {str(e)}'}, status=500)
 
 @require_http_methods(["DELETE"])
-def api_tagDelete(request, tag_id):
+def api_tagsDelete(request):
+    profile = request.user.profile
     try:
-        tag = get_object_or_404(Tag, id=tag_id, user=request.user)
-        tag.delete()
-        return JsonResponse({
-            'success': True, 
-            'message': 'Tag deleted'
-        })
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    try:
+        response_data = {
+            'profile' : profile.user.username,
+        }
+        
+        subject_id = data.get('subject_id')
+        taskType_id = data.get('taskType_id')
+        if subject_id: subject = get_object_or_404(Subject, id=subject_id, user=request.user)
+        if taskType_id: taskType = get_object_or_404(TaskType, id=taskType_id, user=request.user)
+
+        if subject_id: 
+            subject.delete() 
+            response_data['subject'] = {"success": True, "message": "Subject deleted"}
+        if taskType_id: 
+            taskType.delete()
+            response_data['taskType'] = {"success": True, "message": "TaskType deleted"}
+
+        return JsonResponse(response_data)
     except Http404:
         return JsonResponse({
             'success': False, 
@@ -732,37 +742,40 @@ def api_tagDelete(request, tag_id):
         })
     
 @require_http_methods(["PUT"])
-def api_tagEdit(request, tag_id):
-    try:
-        tag = get_object_or_404(Tag, id=tag_id, user=request.user)
-    except Http404:
-        return JsonResponse({
-            'error': 'Tag by this id is nonexistent'
-        })
+def api_tagEdit(request):
     profile = request.user.profile
-
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
-
     try:
-        # Получаем обновленные данные
-        new_name = data.get('name', tag.name)
-        
-        tag.name = new_name
-        tag.save()
-        
+
         response_data = {
-            'success': True,
-            'message': 'Tag updated successfully',
             'profile': profile.user.username,
-            'tag': {
-                'id': tag.id,
-                'name': tag.name,
-            }
         }
-        
+
+        subject_id = data.get('subject_id')
+        if subject_id:
+            subject = get_object_or_404(Subject, id=subject_id, user=request.user)
+            new_subject_name = data.get('subject_name', subject.name)
+            subject.name = new_subject_name
+            subject.save()
+            response_data['subject'] = {
+                "success": True,
+                "message": "Subject edited successfully"   
+            }
+
+        taskType_id = data.get('taskType_id')
+        if taskType_id: 
+            taskType = get_object_or_404(TaskType, id=taskType_id, user=request.user)
+            new_taskType_name = data.get('taskType_name', taskType.name)
+            taskType.name = new_taskType_name
+            taskType.save()
+            response_data['taskType'] = {
+                "success": True,
+                "message": "TaskType edited successfully"   
+            }
+
         return JsonResponse(response_data)
     except Exception as e:
-        return JsonResponse({'error': f'Task edit failed: {str(e)}'}, status=500)
+        return JsonResponse({'error': f'Tag edit failed: {str(e)}'}, status=500)

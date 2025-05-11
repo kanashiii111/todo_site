@@ -11,10 +11,16 @@ TASKTYPE_REWARD= {
     "Экзамен" : "100",
 }
 
-class Tag(models.Model):
-    name = models.CharField(max_length=50)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tags')
-    tasks = models.ManyToManyField('Task', related_name='task_tags', blank=True)
+class Subject(models.Model):
+    name = models.CharField(max_length=100)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+
+    def __str__(self):
+        return self.name
+
+class TaskType(models.Model):
+    name = models.CharField(max_length=100)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -26,11 +32,10 @@ class Task(models.Model):
     isCompleted = models.BooleanField(default=False)
     isExpired = models.BooleanField(default=False)
     wasCompletedBefore = models.BooleanField(default=False)
-    subject = models.CharField(max_length=50)
-    taskType = models.CharField(max_length=50)
-    dateTime_due = models.DateTimeField(default=datetime.date.today)
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
+    taskType = models.ForeignKey(TaskType, on_delete=models.CASCADE)
+    dateTime_due = models.DateTimeField(default=timezone.now())
     xp = models.IntegerField(default=0)
-    tags = models.ManyToManyField(Tag, related_name='tagged_tasks', blank=True)
     
     def __str__(self):
         return self.title
