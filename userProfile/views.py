@@ -166,6 +166,7 @@ def api_tasksView(request):
             'id': task.id,
             'title': task.title,
             'description': task.description,
+            'priority': task.priority,
             'isCompleted': task.isCompleted,
             'due_date': task_due_local,
             'subject': task.subject,
@@ -189,13 +190,14 @@ def api_taskCreate(request):
     try:
         title = data.get('title')
         description = data.get('description', '')
+        priority = data.get('priority')
         subject_id = data.get('subject_id')
         task_type_id = data.get('taskType_id')
         date_time_due = data.get('dateTime_due')
         telegram_notifications = data.get('telegram_notifications', False)
         
         # Валидация обязательных полей
-        if not all([title, subject_id, task_type_id, date_time_due]):
+        if not all([title, priority, subject_id, task_type_id, date_time_due]):
             return JsonResponse({'error': 'Missing required fields: title, subject_id, taskType_id, dateTime_due'}, status=400)
         
         try:
@@ -217,6 +219,7 @@ def api_taskCreate(request):
             user=request.user,
             title=title,
             description=description,
+            priority=priority,
             subject=subject,
             taskType=task_type,
             dateTime_due=due_date
@@ -230,6 +233,7 @@ def api_taskCreate(request):
                 'id': task.id,
                 'title': task.title,
                 'description': task.description,
+                'priority': task.priority,
                 'subject': task.subject,
                 'taskType': task.taskType,
                 'dateTime_due': task.dateTime_due.isoformat(),
@@ -302,13 +306,12 @@ def api_taskEdit(request, task_id):
         # Получаем обновленные данные
         new_title = data.get('title', task.title)
         new_description = data.get('description', task.description)
+        new_priority = data.get('priority', task.priority)
         new_subject_id = data.get('subject_id', task.subject)
         new_task_type_id = data.get('taskType_id', task.taskType)
         new_date_time_due = data.get('dateTime_due', task.dateTime_due)
         telegram_notifications = data.get('telegram_notifications', False)
         
-        # Проверка допустимых значений subject
-
         try:
             new_subject = Subject.objects.get(id=new_subject_id)
             new_task_type = TaskType.objects.get(id=new_task_type_id)
@@ -328,6 +331,7 @@ def api_taskEdit(request, task_id):
         
         task.title = new_title
         task.description = new_description
+        task.priority = new_priority
         task.subject = new_subject
         task.taskType = new_task_type
         task.save()
@@ -340,6 +344,7 @@ def api_taskEdit(request, task_id):
                 'id': task.id,
                 'title': task.title,
                 'description': task.description,
+                'priority': task.priority,
                 'subject': task.subject,
                 'taskType': task.taskType,
                 'dateTime_due': task.dateTime_due.isoformat(),
@@ -485,6 +490,7 @@ def api_taskView(request, task_id):
         'profile': profile.user.username,
         'title': task.title,
         'description': task.description,
+        'priority': task.priority,
         'subject': task.subject,
         'taskType': task.taskType,
         'dateTime_due': task.dateTime_due.isoformat(),

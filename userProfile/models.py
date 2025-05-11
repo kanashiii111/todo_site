@@ -4,11 +4,11 @@ from django.contrib.auth.models import User
 from datetime import timedelta
 from django.utils import timezone
 
-TASKTYPE_REWARD= {
-    "Лабораторная работа" : "50",
-    "Практическая работа" : "20", 
-    "Домашняя работа" : "10", 
-    "Экзамен" : "100",
+XP_REWARDS = {
+    1: 100,
+    2: 50,
+    3: 25,
+    4: 10
 }
 
 class Subject(models.Model):
@@ -29,6 +29,7 @@ class Task(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tasks')
     title = models.CharField(max_length=50)
     description = models.CharField(max_length=50)
+    priority = models.IntegerField(default=1)
     isCompleted = models.BooleanField(default=False)
     isExpired = models.BooleanField(default=False)
     wasCompletedBefore = models.BooleanField(default=False)
@@ -46,8 +47,9 @@ class Task(models.Model):
         super().save(*args, **kwargs)
     
     def calc_xp_reward(self):
-        return int(TASKTYPE_REWARD.get(self.taskType, 0))
-    
+        return XP_REWARDS.get(self.priority, 0)
+        
+        
     def complete_task(self):
         if not self.isCompleted:
             self.isCompleted = True
