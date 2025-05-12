@@ -1,4 +1,3 @@
-import json
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.date import DateTrigger
 from django.utils import timezone
@@ -29,7 +28,7 @@ def send_reminder(reminder_id):
             local_due = timezone.localtime(task.dateTime_due)
             
             message = (
-                f"⏰ Напоминание к задаче: {task.title}\n"
+                f"⏰ Напоминание для задачи: {task.title}\n"
                 f"📅 Срок выполнения: {local_due.strftime('%d.%m.%Y %H:%M')}\n"
                 f"📝 {task.description or 'Описание'}\n"
             )
@@ -44,13 +43,10 @@ def send_reminder(reminder_id):
                 requests.post(url, json=payload)
                 
                 reminder.last_reminder_sent = timezone.now()
-                if reminder.repeat_interval > 0:
-                    new_days = reminder.remind_before_days + reminder.repeat_interval
-                    if new_days < (task.dateTime_due - timezone.now()).days:
-                        reminder.remind_before_days = new_days
-                        schedule_next_reminder(reminder)
-                    else:
-                        reminder.is_active = False
+                if reminder.remind_before_days != 0:
+                    reminder.is_active = False
+                elif reminder.repeat_interval > 0:
+                    schedule_next_reminder(reminder)
                 else:
                     reminder.is_active = False
                 reminder.save()
@@ -77,10 +73,7 @@ def schedule_next_reminder(reminder):
         id=job_id,
         replace_existing=True,
     )
-    
-    if not scheduler.running:
-        scheduler.start()
-        register_events(scheduler)
+    register_events(scheduler)
 
 def check_and_schedule_reminders():
     from .models import TaskReminder
@@ -118,8 +111,3 @@ def check_and_schedule_reminders():
         except Exception as e:
             logger.error(f"Критическая ошибка: {str(e)}")
             break
-
-# Инициализация планировщика при импорте
-if not scheduler.running:
-    scheduler.start()
-    register_events(scheduler)

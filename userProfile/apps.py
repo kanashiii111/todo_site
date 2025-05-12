@@ -24,6 +24,7 @@ class UserprofileConfig(AppConfig):
         import time
         from django.db import connection
         
+        # Ждем, пока Django полностью загрузится
         while True:
             try:
                 connection.ensure_connection()

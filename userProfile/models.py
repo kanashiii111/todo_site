@@ -27,6 +27,7 @@ class TaskType(models.Model):
     
 class Task(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tasks')
+    created_at = models.DateTimeField(auto_now_add=True)
     title = models.CharField(max_length=50)
     description = models.CharField(max_length=50)
     priority = models.IntegerField(default=4)
@@ -87,7 +88,13 @@ class TaskReminder(models.Model):
     
     def next_reminder_datetime(self):
         due_date = self.task.dateTime_due
-        reminder_date = due_date - timedelta(days=self.remind_before_days)
+        if self.remind_before_days != 0:
+            reminder_date = due_date - timedelta(days=self.remind_before_days)
+        else:
+            if self.last_reminder_sent:
+                reminder_date = self.task.created_at + timedelta(days=self.repeat_interval)
+            else:
+                reminder_date = self.task.created_at
         reminder_datetime = datetime.datetime.combine(
             reminder_date.date(), 
             self.reminder_time
