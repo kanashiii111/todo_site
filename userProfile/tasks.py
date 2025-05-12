@@ -8,6 +8,7 @@ from django_apscheduler.jobstores import DjangoJobStore, register_events
 from django.db import close_old_connections
 import time
 from django.db.utils import OperationalError
+from datetime import timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,9 @@ def send_reminder(reminder_id):
                 requests.post(url, json=payload)
                 
                 reminder.last_reminder_sent = timezone.now()
+                next_possible_reminder = reminder.last_reminder_sent + timedelta(days=reminder.repeat_interval)
+                if next_possible_reminder >= reminder.task.dateTime_due:
+                    reminder.is_active = False
                 if reminder.remind_before_days != 0:
                     reminder.is_active = False
                 elif reminder.repeat_interval > 0:
