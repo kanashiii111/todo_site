@@ -14,18 +14,19 @@ DEBUG=True
 
 ALLOWED_HOSTS = ['*']
 
-CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
-CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_TIMEZONE = 'Europe/Moscow'
-CELERY_BEAT_SCHEDULE = {
-    'check-reminders': {
-        'task': 'userProfile.tasks.check_reminders',
-        'schedule': 60.0, 
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
     },
 }
-
 
 # Application definition
 
@@ -42,7 +43,8 @@ INSTALLED_APPS = [
     'users.apps.UsersConfig',
     'userProfile.apps.UserprofileConfig',
     'crispy_forms',
-    'django_filters'
+    'django_filters',
+    'django_apscheduler',
     
 ]
 

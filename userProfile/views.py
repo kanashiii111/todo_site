@@ -1,5 +1,6 @@
 ## Фронт
 import json
+from django.db import OperationalError
 from django.http import Http404, JsonResponse
 from django.views import View
 from django.views.decorators.http import require_POST, require_http_methods
@@ -7,7 +8,6 @@ from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.contrib.auth import authenticate, update_session_auth_hash, logout
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
-import base64
 
 from django.shortcuts import get_object_or_404
 from .models import Task, TaskReminder, Subject, TaskType
@@ -15,41 +15,65 @@ import calendar
 from django.utils.decorators import method_decorator
 from datetime import datetime, time, timedelta, date
 from django.utils import timezone
-import requests
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
 from users.models import Profile
-import todo_site.settings
+from django.conf import settings
+import requests
+import logging
 
-@require_POST   
+logger = logging.getLogger(__name__)
+
+@require_POST
 @csrf_exempt
 def telegram_webhook(request):
-    if request.method == "POST":
-        data = json.loads(request.body)
-        message = data.get("message", {})
-        
-        if message.get("text") == "/start":
-            chat_id = message["chat"]["id"]
-            response_text = (
-                f"🔑 Ваш Telegram Chat ID: `{chat_id}`\n\n"
-                "1. Скопируйте этот номер\n"
-                "2. Вставьте его в поле 'Telegram Chat ID' на сайте\n"
-                "3. Сохраните изменения\n\n"
-                "Теперь вы будете получать уведомления о задачах!"
-            )
-            
-            requests.post(
-                f"https://api.telegram.org/bot{todo_site.settings.TELEGRAM_BOT_TOKEN}/sendMessage",
-                json={
-                    "chat_id": chat_id,
-                    "text": response_text,
-                    "parse_mode": "Markdown"
-                }
-            )
-        
-        return JsonResponse({"status": "ok"})
+    from django.db import connection, transaction
+    import time
     
-    return JsonResponse({"status": "error"}, status=400)
+    max_retries = 3
+    retry_delay = 0.5
+    
+    for attempt in range(max_retries):
+        try:
+            # Явное управление соединением
+            with connection.cursor() as cursor:
+                data = json.loads(request.body.decode('utf-8'))
+                message = data.get('message', {})
+                
+                if message.get('text') == '/start':
+                    chat_id = message['chat']['id']
+                    
+                    # Используем транзакцию
+                    with transaction.atomic():
+                        # Ваша логика обработки
+                        response_text = (
+                            f"🔑 Ваш Telegram Chat ID: `{chat_id}`\n\n"
+                            "1. Скопируйте этот номер\n"
+                            "2. Вставьте его в поле 'Telegram Chat ID' на сайте\n"
+                            "3. Сохраните изменения\n\n"
+                            "Теперь вы будете получать уведомления о задачах!"
+                        )
+                        
+                        requests.post(
+                            f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage",
+                            json={
+                                "chat_id": chat_id,
+                                "text": response_text,
+                                "parse_mode": "Markdown"
+                            },
+                            timeout=3
+                        )
+                    
+                    return JsonResponse({'status': 'ok'})
+                
+            break  # Успешное выполнение
+            
+        except OperationalError as e:
+            if attempt == max_retries - 1:
+                logger.error(f"Database locked after {max_retries} attempts")
+                return JsonResponse({'status': 'error'}, status=503)
+            time.sleep(retry_delay)
+    return JsonResponse({'status': 'ok'})        
 
 # Настройки
 
